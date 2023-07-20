@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package lerpc;
+option go_package = "./pkg/lerpc";
+
+
+service LeaderElectionService {
+  rpc RequestVoteRPC(RequestVote) returns (RequestVoteResponse) {}
+}
+
+message RequestVote {
+  int64 CurrentTerm = 1;
+  string CandidateId = 2;
+  int64 LastLogIndex = 3;
+	int64 LastLogTerm = 4;
+}
+
+message RequestVoteResponse {
+  int64 Term = 1;
+  bool VoteGranted = 2;
+}

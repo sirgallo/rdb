@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package replogrpc;
+option go_package = "./pkg/replogrpc";
+
+
+service RepLogService {
+  rpc AppendEntryRPC(stream AppendEntry) returns (stream AppendEntryResponse) {}
+}
+
+message LogEntry {
+  int64 Index = 1;
+  int64 Term = 2;
+  string Command = 3;
+}
+
+message AppendEntry {
+  int64 Term = 1;
+  string LeaderId = 2;
+  string PrevLogIndex = 3;
+  repeated LogEntry Entries = 4;
+  int64 LeaderCommitIndex = 5;
+}
+
+message AppendEntryResponse {
+  bool Success = 1;
+}
