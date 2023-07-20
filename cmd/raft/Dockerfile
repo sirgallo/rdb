@@ -7,7 +7,7 @@ COPY cmd ./cmd
 COPY go.mod \
   go.sum ./
 
-RUN go build -o lesrv ./cmd/raft/main.go 
+RUN go build -o raft ./cmd/raft/main.go 
 
 EXPOSE 54321
 

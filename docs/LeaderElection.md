@@ -61,3 +61,8 @@ if timeout period is exceeded on a follower:
 if request is received during period:
   reset timeout and wait for next period
 ```
+
+
+## Sources
+
+[Leader Election](../pkg/leaderelection/LeaderElection.go)

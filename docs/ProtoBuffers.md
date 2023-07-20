@@ -3,6 +3,21 @@
 
 ## Overview
 
+`Protocol Buffers` are a language agnostic data serialization format, developed by `Google`. `Protocol Buffers` use a binary representation of data which make them more efficient for transferring data between systems, over something like `JSON`.
+
+
+### GRPC
+
+The Raft nodes utilize `grpc`, which is a remote procedure call framework also developed by `Google`. `Protocol Buffers` are the default data exchange format for the framework. `grpc` is well suited for building distributed systems and especially microservices.
+
+Some key features of `grpc`:
+
+1. Language Agnostic
+2. Bidirectional Streaming
+3. Strongly Typed Contracts in the form of Protocol Buffers
+4. Auto Code Generation
+5. Load Balancing and Service Discovery
+
 
 ## Building Go and Go_RPC PB files
 

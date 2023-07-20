@@ -17,7 +17,7 @@ message LogEntry {
 message AppendEntry {
   int64 Term = 1;
   string LeaderId = 2;
-  string PrevLogIndex = 3;
+  int64 PrevLogIndex = 3;
   repeated LogEntry Entries = 4;
   int64 LeaderCommitIndex = 5;
 }

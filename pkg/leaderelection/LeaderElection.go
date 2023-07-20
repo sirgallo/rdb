@@ -4,7 +4,6 @@ import "context"
 import "log"
 import "math/rand"
 import "net"
-import "strconv"
 import "sync"
 import "time"
 import "google.golang.org/grpc"
@@ -17,7 +16,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 func NewLeaderElectionService(opts *LeaderElectionOpts) *LeaderElectionService {
 	return &LeaderElectionService{
-		Port:               normalizePort(opts.Port),
+		Port:               utils.NormalizePort(opts.Port),
 		CurrentTerm:        opts.CurrentTerm,
 		LastLogIndex:       opts.LastLogIndex,
 		LastLogTerm:        opts.LastLogTerm,
@@ -42,21 +41,18 @@ func (leService *LeaderElectionService) StartLeaderElectionService(listener *net
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil {
-			log.Fatalf("Failed to serve: %v", err)
-		}
+		if err != nil { log.Fatalf("Failed to serve: %v", err) }
 	}()
 
 	for {
 		timeout := time.After(timeoutDuration)
 
 		select {
-		case <-leService.ResetTimeoutSignal:
-			log.Println("Reset Timeout Signal Reached")
-		case <-timeout:
-			log.Println("Starting election process on", leService.CurrentSystem.Host)
-			leService.Election()
-		default:
+			case <- leService.ResetTimeoutSignal:
+			case <- timeout:
+				log.Println("Starting election process on", leService.CurrentSystem.Host)
+				leService.Election()
+			default:
 		}
 	}
 }
@@ -87,22 +83,16 @@ func (leService *LeaderElectionService) Election() {
 			defer requestVoteWG.Done()
 
 			conn, err := grpc.Dial(sys.Host+leService.Port, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("Failed to connect to %s: %v", sys.Host+leService.Port, err)
-			}
+			if err != nil { log.Fatalf("Failed to connect to %s: %v", sys.Host+leService.Port, err) }
 
 			client := lerpc.NewLeaderElectionServiceClient(conn)
 
 			res, err := client.RequestVoteRPC(context.Background(), request)
-			if err != nil {
-				log.Println("failed to request vote -->", err)
-			}
+			if err != nil { log.Println("failed to request vote -->", err) }
 
 			log.Printf("res on %s: %s", leService.CurrentSystem.Host, res)
 
-			if res.VoteGranted {
-				totalVotes += 1
-			}
+			if res.VoteGranted { totalVotes += 1 }
 
 			conn.Close()
 		}(sys)
@@ -121,7 +111,7 @@ func (leService *LeaderElectionService) Election() {
 func (leService *LeaderElectionService) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
 	log.Println("RequestVoteRPC received:", req)
 
-	if req.CurrentTerm < *leService.CurrentTerm {
+	if req.CurrentTerm >= *leService.CurrentTerm {
 		return &lerpc.RequestVoteResponse{
 			Term:        *leService.CurrentTerm,
 			VoteGranted: false,
@@ -145,8 +135,4 @@ func (leService *LeaderElectionService) RequestVoteRPC(ctx context.Context, req 
 
 func initializeTimeout() int {
 	return rand.Intn(151) + 150
-}
-
-func normalizePort(port int) string {
-	return ":" + strconv.Itoa(port)
 }

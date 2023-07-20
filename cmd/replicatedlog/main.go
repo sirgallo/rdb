@@ -5,7 +5,7 @@ import "net"
 import "os"
 import "strconv"
 
-import "github.com/sirgallo/raft/pkg/leaderelection"
+import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/shared"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -18,12 +18,10 @@ func main() {
 
 	port := 54321
 
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	listener, err := net.Listen("tcp", ":" + strconv.Itoa(port))
 	if err != nil { log.Fatalf("Failed to listen: %v", err) }
 
 	var currentTerm int64 = 0
-	var lastLogIndex int64 = 0
-	var lastLogTerm int64 = 0
 	currentSystem := &shared.System{
 		Host: hostname,
 	}
@@ -36,15 +34,13 @@ func main() {
 		{ Host: "lesrv5" },
 	}
 
-	leOpts := &leaderelection.LeaderElectionOpts{
+	rlOpts := &replog.ReplicatedLogOpts{
 		Port:          port,
 		CurrentTerm:   &currentTerm,
-		LastLogIndex:  &lastLogIndex,
-		LastLogTerm:   &lastLogTerm,
 		CurrentSystem: currentSystem,
 		SystemsList:   utils.Filter[*shared.System](systemsList, func(sys *shared.System) bool { return sys.Host != hostname }),
 	}
 
-	leService := leaderelection.NewLeaderElectionService(leOpts)
-	leService.StartLeaderElectionService(&listener)
+	rlService := replog.NewReplicatedLogService[string](rlOpts)
+	rlService.StartReplicatedLogService(&listener)
 }
