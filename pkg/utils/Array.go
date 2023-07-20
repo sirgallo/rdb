@@ -4,9 +4,7 @@ package utils
 func Filter [T comparable](array []T, condition func(T) bool) []T {
 	var filtered []T
 	for _, elem := range array {
-		if condition(elem) {
-			filtered = append(filtered, elem)
-		}
+		if condition(elem) { filtered = append(filtered, elem) }
 	}
 
 	return filtered

@@ -7,8 +7,8 @@ import "github.com/sirgallo/raft/pkg/shared"
 const HeartbeatIntervalInMs = 50
 
 type LogEntry [T comparable] struct {
-	Index int64
-	Term int64
+	Index   int64
+	Term    int64
 	Command T // command can be type T to represent the specific state machine commands 
 }
 
@@ -33,7 +33,7 @@ type ReplicatedLogService [T comparable] struct {
 
 	// Module Specific
 	PrevLogIndex int64
-  PrevLogTerm int64
+  PrevLogTerm  int64
 
 	Replog []*LogEntry[T]
 }

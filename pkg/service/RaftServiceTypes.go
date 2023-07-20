@@ -1,6 +1,7 @@
 package service
 
 import "github.com/sirgallo/raft/pkg/leaderelection"
+import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/shared"
 
 
@@ -16,7 +17,7 @@ type RaftService[T comparable] struct {
 	SystemList    []*shared.System
 
 	LeaderElection *leaderelection.LeaderElectionService
-	// Log replog.ReplicatedLog[T]
+	ReplicatedLog  *replog.ReplicatedLogService[T]
 
 	// Volatile State
 	CommitIndex int64
