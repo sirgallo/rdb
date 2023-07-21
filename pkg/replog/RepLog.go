@@ -36,20 +36,18 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 
 	time.Sleep(1 * time.Second)	// wait for server to start up
 
-	heartbeatTicker := time.NewTicker(HeartbeatIntervalInMs * time.Millisecond)
-	defer heartbeatTicker.Stop()
-
 	for {
-		if rlService.CurrentSystem.State == shared.Leader {
-			select {
-				case newLog :=<- rlService.AppendLogSignal:
+		select {
+			case newLog :=<- rlService.AppendLogSignal:
+				if rlService.CurrentSystem.State == shared.Leader {
 					rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 					rlService.ReplicateLogs(newLog)
-					heartbeatTicker.Reset(HeartbeatIntervalInMs * time.Millisecond)
-				case <- heartbeatTicker.C:
+				}
+			case <- time.After(HeartbeatIntervalInMs * time.Millisecond):
+				if rlService.CurrentSystem.State == shared.Leader {
 					log.Printf("host %s sending heartbeats...", rlService.CurrentSystem.Host)
 					rlService.Heartbeat()
-			}
+				}
 		}
 	}
 }

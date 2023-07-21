@@ -43,18 +43,14 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 
 	time.Sleep(1 * time.Second)	// wait for server to start up
 
-	electionTicker := time.NewTicker(leService.Timeout)
-	defer electionTicker.Stop()
-
 	for {
-		if leService.CurrentSystem.State == shared.Follower {
-			select {
-				case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
-					electionTicker.Reset(leService.Timeout)
-				case <- electionTicker.C:
+		select {
+			case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
+			case <- time.After(leService.Timeout):
+				if leService.CurrentSystem.State == shared.Follower {
 					log.Println("timeout reached, starting election process on", leService.CurrentSystem.Host)
 					leService.Election()
-			}
+				}
 		}
 	}
 }

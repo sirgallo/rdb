@@ -74,12 +74,12 @@ func main() {
 	go rlService.StartReplicatedLogService(&rlListener)
 	go leService.StartLeaderElectionService(&leListener)
 
-	go func() {
+	go func () {
 		for {
 			<- rlService.LeaderAcknowledgedSignal
 			leService.ResetTimeoutSignal <- true
 		}
 	}()
-
-	select {}
+	
+	select{}
 }
