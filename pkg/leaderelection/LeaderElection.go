@@ -7,132 +7,169 @@ import "net"
 import "sync"
 import "time"
 import "google.golang.org/grpc"
-import "google.golang.org/grpc/credentials/insecure"
 
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/shared"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-func NewLeaderElectionService(opts *LeaderElectionOpts) *LeaderElectionService {
-	return &LeaderElectionService{
+func NewLeaderElectionService [T comparable](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
+	leService := &LeaderElectionService[T]{
 		Port:               utils.NormalizePort(opts.Port),
-		CurrentTerm:        opts.CurrentTerm,
-		LastLogIndex:       opts.LastLogIndex,
-		LastLogTerm:        opts.LastLogTerm,
+		ConnectionPool:     opts.ConnectionPool,
 		CurrentSystem:      opts.CurrentSystem,
 		SystemsList:        opts.SystemsList,
-		State:              Follower,
 		VotedFor:           utils.GetZero[string](),
 		Timeout:            initializeTimeout(),
 		ResetTimeoutSignal: make(chan bool),
 	}
+
+	leService.CurrentSystem.State = shared.Follower
+
+	return leService
 }
 
-func (leService *LeaderElectionService) StartLeaderElectionService(listener *net.Listener) {
+func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *net.Listener) {
 	log.Println("service timeout period:", leService.Timeout)
-	timeoutDuration := time.Duration(leService.Timeout) * time.Millisecond
 
 	srv := grpc.NewServer()
-	log.Println("gRPC server is listening on port:", leService.Port)
+	log.Println("leader election gRPC server is listening on port:", leService.Port)
 	lerpc.RegisterLeaderElectionServiceServer(srv, leService)
-
-	log.Printf("systems list on %s: %v", leService.CurrentSystem.Host, utils.Map[*shared.System, string](leService.SystemsList, func(sys *shared.System) string { return sys.Host }))
 
 	go func() {
 		err := srv.Serve(*listener)
 		if err != nil { log.Fatalf("Failed to serve: %v", err) }
 	}()
 
-	for {
-		timeout := time.After(timeoutDuration)
+	time.Sleep(1 * time.Second)	// wait for server to start up
 
-		select {
-			case <- leService.ResetTimeoutSignal:
-			case <- timeout:
-				log.Println("Starting election process on", leService.CurrentSystem.Host)
-				leService.Election()
-			default:
+	electionTicker := time.NewTicker(leService.Timeout)
+	defer electionTicker.Stop()
+
+	for {
+		if leService.CurrentSystem.State == shared.Follower {
+			select {
+				case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
+					electionTicker.Reset(leService.Timeout)
+				case <- electionTicker.C:
+					log.Println("timeout reached, starting election process on", leService.CurrentSystem.Host)
+					leService.Election()
+			}
 		}
 	}
 }
 
-func (leService *LeaderElectionService) Election() {
-	sysHostPtr := &leService.CurrentSystem.Host
-	request := &lerpc.RequestVote{
-		CurrentTerm:  *leService.CurrentTerm,
-		CandidateId:  *sysHostPtr,
-		LastLogIndex: *leService.LastLogIndex,
-		LastLogTerm:  *leService.LastLogTerm,
-	}
-
-	*leService.CurrentTerm = *leService.CurrentTerm + int64(1)
-	leService.State = Candidate
+func (leService *LeaderElectionService[T]) Election() {
+	leService.CurrentSystem.CurrentTerm = leService.CurrentSystem.CurrentTerm + int64(1)
+	leService.CurrentSystem.State = shared.Candidate
 	leService.VotedFor = leService.CurrentSystem.Host
 
 	totalSystems := len(leService.SystemsList) + 1
 	minimumVotes := (totalSystems / 2) + 1
-	totalVotes := 1
+
+	totalVotes := leService.BroadcastVotes()
+	// log.Printf("total votes for %s: %d, minimum votes needed: %d\n", leService.CurrentSystem.Host, totalVotes, minimumVotes)
+
+	if totalVotes >= minimumVotes {
+		leService.CurrentSystem.State = shared.Leader
+		log.Printf("service with hostname: %s has been elected leader\n", leService.CurrentSystem.Host)
+	} else {
+		leService.CurrentSystem.State = shared.Follower
+		leService.VotedFor = utils.GetZero[string]()
+	}
+
+	leService.Timeout = initializeTimeout()	// re-init timeout after election
+}
+
+func (leService *LeaderElectionService[T]) BroadcastVotes() int {
+	lastLogIndex, lastLogTerm := shared.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+	request := &lerpc.RequestVote{
+		CurrentTerm:  leService.CurrentSystem.CurrentTerm,
+		CandidateId:  leService.CurrentSystem.Host,
+		LastLogIndex: lastLogIndex,
+		LastLogTerm:  lastLogTerm,
+	}
+
+	totalVotes := 1 // vote for self
+	higherTermDiscovered := make(chan bool, 1)
 
 	var requestVoteWG sync.WaitGroup
 
 	for _, sys := range leService.SystemsList {
 		requestVoteWG.Add(1)
 
-		go func(sys *shared.System) {
+		go func(sys *shared.System[T]) {
 			defer requestVoteWG.Done()
 
-			conn, err := grpc.Dial(sys.Host+leService.Port, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil { log.Fatalf("Failed to connect to %s: %v", sys.Host+leService.Port, err) }
+			conn, err := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
+			if err != nil { log.Fatalf("Failed to connect to %s: %v", sys.Host + leService.Port, err) }
 
 			client := lerpc.NewLeaderElectionServiceClient(conn)
 
 			res, err := client.RequestVoteRPC(context.Background(), request)
 			if err != nil { log.Println("failed to request vote -->", err) }
 
-			log.Printf("res on %s: %s", leService.CurrentSystem.Host, res)
+			if res.Term > leService.CurrentSystem.CurrentTerm { 
+				leService.CurrentSystem.CurrentTerm = res.Term 
+				higherTermDiscovered <- true
+			}
 
 			if res.VoteGranted { totalVotes += 1 }
 
-			conn.Close()
+			leService.ConnectionPool.PutConnection(sys.Host, conn)
 		}(sys)
 	}
 
 	requestVoteWG.Wait()
 
-	log.Printf("total votes for %s: %d, minimum votes needed: %d\n", leService.CurrentSystem.Host, totalVotes, minimumVotes)
-
-	if totalVotes >= minimumVotes {
-		leService.State = Leader
-		log.Printf("service with hostname: %s has been elected leader\n", leService.CurrentSystem.Host)
+	select {
+		case <- higherTermDiscovered:
+			return 0
+		default:
+			return totalVotes
 	}
 }
 
-func (leService *LeaderElectionService) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
-	log.Println("RequestVoteRPC received:", req)
+func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
+	if req.CurrentTerm > leService.CurrentSystem.CurrentTerm {
+		leService.VotedFor = req.CandidateId
+		leService.CurrentSystem.CurrentTerm = req.CurrentTerm
+		leService.CurrentSystem.State = shared.Follower
 
-	if req.CurrentTerm >= *leService.CurrentTerm {
-		return &lerpc.RequestVoteResponse{
-			Term:        *leService.CurrentTerm,
-			VoteGranted: false,
-		}, nil
-	}
-
-	if req.LastLogIndex >= *leService.LastLogIndex && req.LastLogTerm >= *leService.LastLogTerm {
-		return &lerpc.RequestVoteResponse{
-			Term:        utils.GetZero[int64](),
+		voteGranted := &lerpc.RequestVoteResponse{
+			Term: req.CurrentTerm,
 			VoteGranted: true,
-		}, nil
+		}
+
+		return voteGranted, nil
+	} else if req.CurrentTerm == leService.CurrentSystem.CurrentTerm && (leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId) {
+		lastLogIndex, lastLogTerm := shared.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+		
+		if req.LastLogIndex >= lastLogIndex && req.LastLogTerm >= lastLogTerm {
+			leService.VotedFor = req.CandidateId
+			leService.CurrentSystem.CurrentTerm = req.CurrentTerm
+			leService.CurrentSystem.State = shared.Follower
+
+			voteGranted := &lerpc.RequestVoteResponse{
+				Term: utils.GetZero[int64](),
+				VoteGranted: true,
+			}
+
+			return voteGranted, nil
+		}
 	}
 
-	res := &lerpc.RequestVoteResponse{
-		Term:        utils.GetZero[int64](),
+	voteRejected := &lerpc.RequestVoteResponse{
+		Term: leService.CurrentSystem.CurrentTerm,
 		VoteGranted: false,
 	}
 
-	return res, nil
+	return voteRejected, nil
 }
 
-func initializeTimeout() int {
-	return rand.Intn(151) + 150
+func initializeTimeout() time.Duration {
+	timeout := rand.Intn(151) + 150
+	timeoutDuration := time.Duration(timeout) * time.Millisecond
+
+	return timeoutDuration
 }

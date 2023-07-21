@@ -26,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type RepLogServiceClient interface {
-	AppendEntryRPC(ctx context.Context, opts ...grpc.CallOption) (RepLogService_AppendEntryRPCClient, error)
+	AppendEntryRPC(ctx context.Context, in *AppendEntry, opts ...grpc.CallOption) (*AppendEntryResponse, error)
 }
 
 type repLogServiceClient struct {
@@ -37,42 +37,20 @@ func NewRepLogServiceClient(cc grpc.ClientConnInterface) RepLogServiceClient {
 	return &repLogServiceClient{cc}
 }
 
-func (c *repLogServiceClient) AppendEntryRPC(ctx context.Context, opts ...grpc.CallOption) (RepLogService_AppendEntryRPCClient, error) {
-	stream, err := c.cc.NewStream(ctx, &RepLogService_ServiceDesc.Streams[0], RepLogService_AppendEntryRPC_FullMethodName, opts...)
+func (c *repLogServiceClient) AppendEntryRPC(ctx context.Context, in *AppendEntry, opts ...grpc.CallOption) (*AppendEntryResponse, error) {
+	out := new(AppendEntryResponse)
+	err := c.cc.Invoke(ctx, RepLogService_AppendEntryRPC_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &repLogServiceAppendEntryRPCClient{stream}
-	return x, nil
-}
-
-type RepLogService_AppendEntryRPCClient interface {
-	Send(*AppendEntry) error
-	Recv() (*AppendEntryResponse, error)
-	grpc.ClientStream
-}
-
-type repLogServiceAppendEntryRPCClient struct {
-	grpc.ClientStream
-}
-
-func (x *repLogServiceAppendEntryRPCClient) Send(m *AppendEntry) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *repLogServiceAppendEntryRPCClient) Recv() (*AppendEntryResponse, error) {
-	m := new(AppendEntryResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return out, nil
 }
 
 // RepLogServiceServer is the server API for RepLogService service.
 // All implementations must embed UnimplementedRepLogServiceServer
 // for forward compatibility
 type RepLogServiceServer interface {
-	AppendEntryRPC(RepLogService_AppendEntryRPCServer) error
+	AppendEntryRPC(context.Context, *AppendEntry) (*AppendEntryResponse, error)
 	mustEmbedUnimplementedRepLogServiceServer()
 }
 
@@ -80,8 +58,8 @@ type RepLogServiceServer interface {
 type UnimplementedRepLogServiceServer struct {
 }
 
-func (UnimplementedRepLogServiceServer) AppendEntryRPC(RepLogService_AppendEntryRPCServer) error {
-	return status.Errorf(codes.Unimplemented, "method AppendEntryRPC not implemented")
+func (UnimplementedRepLogServiceServer) AppendEntryRPC(context.Context, *AppendEntry) (*AppendEntryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AppendEntryRPC not implemented")
 }
 func (UnimplementedRepLogServiceServer) mustEmbedUnimplementedRepLogServiceServer() {}
 
@@ -96,30 +74,22 @@ func RegisterRepLogServiceServer(s grpc.ServiceRegistrar, srv RepLogServiceServe
 	s.RegisterService(&RepLogService_ServiceDesc, srv)
 }
 
-func _RepLogService_AppendEntryRPC_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(RepLogServiceServer).AppendEntryRPC(&repLogServiceAppendEntryRPCServer{stream})
-}
-
-type RepLogService_AppendEntryRPCServer interface {
-	Send(*AppendEntryResponse) error
-	Recv() (*AppendEntry, error)
-	grpc.ServerStream
-}
-
-type repLogServiceAppendEntryRPCServer struct {
-	grpc.ServerStream
-}
-
-func (x *repLogServiceAppendEntryRPCServer) Send(m *AppendEntryResponse) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *repLogServiceAppendEntryRPCServer) Recv() (*AppendEntry, error) {
-	m := new(AppendEntry)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
+func _RepLogService_AppendEntryRPC_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendEntry)
+	if err := dec(in); err != nil {
 		return nil, err
 	}
-	return m, nil
+	if interceptor == nil {
+		return srv.(RepLogServiceServer).AppendEntryRPC(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RepLogService_AppendEntryRPC_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RepLogServiceServer).AppendEntryRPC(ctx, req.(*AppendEntry))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 // RepLogService_ServiceDesc is the grpc.ServiceDesc for RepLogService service.
@@ -128,14 +98,12 @@ func (x *repLogServiceAppendEntryRPCServer) Recv() (*AppendEntry, error) {
 var RepLogService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "replogrpc.RepLogService",
 	HandlerType: (*RepLogServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
-	Streams: []grpc.StreamDesc{
+	Methods: []grpc.MethodDesc{
 		{
-			StreamName:    "AppendEntryRPC",
-			Handler:       _RepLogService_AppendEntryRPC_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
+			MethodName: "AppendEntryRPC",
+			Handler:    _RepLogService_AppendEntryRPC_Handler,
 		},
 	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/replogrpc.proto",
 }

@@ -1,42 +1,32 @@
 package leaderelection
 
+import "time"
+
+import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/shared"
 
 
-type SystemState string
-
-const (
-	Leader    SystemState = "leader"
-	Candidate SystemState = "candidate"
-	Follower  SystemState = "follower"
-)
-
-type LeaderElectionOpts struct {
+type LeaderElectionOpts [T comparable] struct {
 	Port int
+	ConnectionPool *connpool.ConnectionPool
 
-	CurrentTerm   *int64
-	LastLogIndex  *int64
-	LastLogTerm   *int64
-	CurrentSystem *shared.System
-	SystemsList   []*shared.System
+	CurrentSystem *shared.System[T]
+	SystemsList   []*shared.System[T]
 }
 
-type LeaderElectionService struct {
+type LeaderElectionService [T comparable] struct {
 	lerpc.UnimplementedLeaderElectionServiceServer
 	Port string
+	ConnectionPool *connpool.ConnectionPool
 
 	// Persistent State
-	CurrentTerm   *int64
-	LastLogIndex  *int64
-	LastLogTerm   *int64
-	CurrentSystem *shared.System
-	SystemsList   []*shared.System
+	CurrentSystem *shared.System[T]
+	SystemsList   []*shared.System[T]
 
 	// Module Level State
-	State    SystemState
 	VotedFor string
-	Timeout  int
+	Timeout  time.Duration
 
 	ResetTimeoutSignal chan bool
 }

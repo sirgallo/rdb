@@ -5,7 +5,7 @@ option go_package = "./pkg/replogrpc";
 
 
 service RepLogService {
-  rpc AppendEntryRPC(stream AppendEntry) returns (stream AppendEntryResponse) {}
+  rpc AppendEntryRPC(AppendEntry) returns (AppendEntryResponse) {}
 }
 
 message LogEntry {
@@ -18,8 +18,9 @@ message AppendEntry {
   int64 Term = 1;
   string LeaderId = 2;
   int64 PrevLogIndex = 3;
-  repeated LogEntry Entries = 4;
-  int64 LeaderCommitIndex = 5;
+  int64 PrevLogTerm = 4;
+  repeated LogEntry Entries = 5;
+  int64 LeaderCommitIndex = 6;
 }
 
 message AppendEntryResponse {

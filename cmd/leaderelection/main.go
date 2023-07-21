@@ -5,6 +5,7 @@ import "net"
 import "os"
 import "strconv"
 
+import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/shared"
 import "github.com/sirgallo/raft/pkg/utils"
@@ -20,15 +21,15 @@ func main() {
 
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil { log.Fatalf("Failed to listen: %v", err) }
-
-	var currentTerm int64 = 0
-	var lastLogIndex int64 = 0
-	var lastLogTerm int64 = 0
-	currentSystem := &shared.System{
+	
+	currentSystem := &shared.System[string]{
 		Host: hostname,
+		CurrentTerm: 0,
+		CommitIndex: 0,
+		Replog: []*shared.LogEntry[string]{},
 	}
 
-	systemsList := []*shared.System{
+	systemsList := []*shared.System[string]{
 		{ Host: "lesrv1" },
 		{ Host: "lesrv2" },
 		{ Host: "lesrv3" },
@@ -36,13 +37,18 @@ func main() {
 		{ Host: "lesrv5" },
 	}
 
-	leOpts := &leaderelection.LeaderElectionOpts{
-		Port:          port,
-		CurrentTerm:   &currentTerm,
-		LastLogIndex:  &lastLogIndex,
-		LastLogTerm:   &lastLogTerm,
-		CurrentSystem: currentSystem,
-		SystemsList:   utils.Filter[*shared.System](systemsList, func(sys *shared.System) bool { return sys.Host != hostname }),
+	cpOpts := connpool.ConnectionPoolOpts{
+		MinConn: 1,
+		MaxConn: 10,
+	}
+
+	leOpts := &leaderelection.LeaderElectionOpts[string]{
+		Port:           port,
+		ConnectionPool: connpool.NewConnectionPool(cpOpts),
+		CurrentSystem:  currentSystem,
+		SystemsList:    utils.Filter[*shared.System[string]](systemsList, func(sys *shared.System[string]) bool { 
+			return sys.Host != hostname 
+		}),
 	}
 
 	leService := leaderelection.NewLeaderElectionService(leOpts)

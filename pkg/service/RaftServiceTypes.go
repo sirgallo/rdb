@@ -10,13 +10,13 @@ type RaftServiceOpts struct {
 	Port     int
 }
 
-type RaftService[T comparable] struct {
+type RaftService [T comparable] struct {
 	// Persistent State
 	CurrentTerm   *int64
-	CurrentSystem *shared.System
-	SystemList    []*shared.System
+	CurrentSystem *shared.System[T]
+	SystemList    []*shared.System[T]
 
-	LeaderElection *leaderelection.LeaderElectionService
+	LeaderElection *leaderelection.LeaderElectionService[T]
 	ReplicatedLog  *replog.ReplicatedLogService[T]
 
 	// Volatile State
