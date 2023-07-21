@@ -68,7 +68,6 @@ func (leService *LeaderElectionService[T]) Election() {
 	minimumVotes := (totalSystems / 2) + 1
 
 	totalVotes := leService.BroadcastVotes()
-	// log.Printf("total votes for %s: %d, minimum votes needed: %d\n", leService.CurrentSystem.Host, totalVotes, minimumVotes)
 
 	if totalVotes >= minimumVotes {
 		leService.CurrentSystem.State = shared.Leader

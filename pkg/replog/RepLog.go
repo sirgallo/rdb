@@ -47,7 +47,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 					rlService.ReplicateLogs(newLog)
 					heartbeatTicker.Reset(HeartbeatIntervalInMs * time.Millisecond)
 				case <- heartbeatTicker.C:
-					// log.Printf("host %s sending heartbeats...", rlService.CurrentSystem.Host)
+					log.Printf("host %s sending heartbeats...", rlService.CurrentSystem.Host)
 					rlService.Heartbeat()
 			}
 		}
@@ -111,8 +111,6 @@ func (rlService *ReplicatedLogService[T]) sendAppendEntryRPC(request *replogrpc.
 }
 
 func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
-	// log.Println("AppendEntryRPC received:", req)
-	
 	var resp *replogrpc.AppendEntryResponse
 	
 	if req.Term < rlService.CurrentSystem.CurrentTerm {

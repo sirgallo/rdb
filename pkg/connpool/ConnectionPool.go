@@ -20,9 +20,7 @@ func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientC
 			if conn != nil { return conn, nil }
 		}
 
-		if len(connections.([]*grpc.ClientConn)) >= cp.maxConn {
-			return nil, errors.New("max connections reached")
-		}
+		if len(connections.([]*grpc.ClientConn)) >= cp.maxConn { return nil, errors.New("max connections reached") }
 	}
 
 	newConn, connErr := grpc.Dial(addr + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -30,12 +28,8 @@ func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientC
 
 	loadedConns, loaded := cp.connections.LoadOrStore(addr, []*grpc.ClientConn{newConn})
 	if loaded {
-		// If another goroutine added a connection array in the meantime,
-		// add the new connection to that array
 		connections := loadedConns.([]*grpc.ClientConn)
-		if len(connections) >= cp.maxConn {
-			return nil, errors.New("max connections reached")
-		}
+		if len(connections) >= cp.maxConn { return nil, errors.New("max connections reached") }
 
 		cp.connections.Store(addr, append(connections, newConn))
 	}
