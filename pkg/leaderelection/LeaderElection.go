@@ -41,8 +41,6 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 		if err != nil { log.Fatalf("Failed to serve: %v", err) }
 	}()
 
-	time.Sleep(1 * time.Second)	// wait for server to start up
-
 	for {
 		select {
 			case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
@@ -68,11 +66,9 @@ func (leService *LeaderElectionService[T]) Election() {
 	if totalVotes >= minimumVotes {
 		leService.CurrentSystem.State = shared.Leader
 		log.Printf("service with hostname: %s has been elected leader\n", leService.CurrentSystem.Host)
-	} else {
-		leService.CurrentSystem.State = shared.Follower
-		leService.VotedFor = utils.GetZero[string]()
-	}
+	} else { leService.CurrentSystem.State = shared.Follower }
 
+	leService.VotedFor = utils.GetZero[string]()
 	leService.Timeout = initializeTimeout()	// re-init timeout after election
 }
 
@@ -102,7 +98,10 @@ func (leService *LeaderElectionService[T]) BroadcastVotes() int {
 			client := lerpc.NewLeaderElectionServiceClient(conn)
 
 			res, err := client.RequestVoteRPC(context.Background(), request)
-			if err != nil { log.Println("failed to request vote -->", err) }
+			if err != nil { 
+				log.Println("failed to request vote -->", err) 
+				return
+			}
 
 			if res.Term > leService.CurrentSystem.CurrentTerm { 
 				leService.CurrentSystem.CurrentTerm = res.Term 
@@ -126,18 +125,9 @@ func (leService *LeaderElectionService[T]) BroadcastVotes() int {
 }
 
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
-	if req.CurrentTerm > leService.CurrentSystem.CurrentTerm {
-		leService.VotedFor = req.CandidateId
-		leService.CurrentSystem.CurrentTerm = req.CurrentTerm
-		leService.CurrentSystem.State = shared.Follower
-
-		voteGranted := &lerpc.RequestVoteResponse{
-			Term: req.CurrentTerm,
-			VoteGranted: true,
-		}
-
-		return voteGranted, nil
-	} else if req.CurrentTerm == leService.CurrentSystem.CurrentTerm && (leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId) {
+	log.Printf("req current term: %d, current system current term: %d\n", req.CurrentTerm, leService.CurrentSystem.CurrentTerm)
+	
+	if req.CurrentTerm >= leService.CurrentSystem.CurrentTerm && (leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId) {
 		lastLogIndex, lastLogTerm := shared.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
 		
 		if req.LastLogIndex >= lastLogIndex && req.LastLogTerm >= lastLogTerm {
@@ -146,7 +136,7 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 			leService.CurrentSystem.State = shared.Follower
 
 			voteGranted := &lerpc.RequestVoteResponse{
-				Term: utils.GetZero[int64](),
+				Term: leService.CurrentSystem.CurrentTerm,
 				VoteGranted: true,
 			}
 

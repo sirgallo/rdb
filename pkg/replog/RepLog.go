@@ -34,8 +34,6 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 		if err != nil { log.Fatalf("Failed to serve: %v", err) }
 	}()
 
-	time.Sleep(1 * time.Second)	// wait for server to start up
-
 	for {
 		select {
 			case newLog :=<- rlService.AppendLogSignal:
