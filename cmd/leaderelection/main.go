@@ -7,7 +7,7 @@ import "strconv"
 
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
-import "github.com/sirgallo/raft/pkg/shared"
+import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
@@ -22,19 +22,19 @@ func main() {
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil { log.Fatalf("Failed to listen: %v", err) }
 	
-	currentSystem := &shared.System[string]{
+	currentSystem := &system.System[string]{
 		Host: hostname,
 		CurrentTerm: 0,
 		CommitIndex: 0,
-		Replog: []*shared.LogEntry[string]{},
+		Replog: []*system.LogEntry[string]{},
 	}
 
-	systemsList := []*shared.System[string]{
-		{ Host: "lesrv1" },
-		{ Host: "lesrv2" },
-		{ Host: "lesrv3" },
-		{ Host: "lesrv4" },
-		{ Host: "lesrv5" },
+	systemsList := []*system.System[string]{
+		{ Host: "lesrv1", Status: system.Alive },
+		{ Host: "lesrv2", Status: system.Alive },
+		{ Host: "lesrv3", Status: system.Alive },
+		{ Host: "lesrv4", Status: system.Alive },
+		{ Host: "lesrv5", Status: system.Alive },
 	}
 
 	cpOpts := connpool.ConnectionPoolOpts{
@@ -46,7 +46,7 @@ func main() {
 		Port:           port,
 		ConnectionPool: connpool.NewConnectionPool(cpOpts),
 		CurrentSystem:  currentSystem,
-		SystemsList:    utils.Filter[*shared.System[string]](systemsList, func(sys *shared.System[string]) bool { 
+		SystemsList:    utils.Filter[*system.System[string]](systemsList, func(sys *system.System[string]) bool { 
 			return sys.Host != hostname 
 		}),
 	}

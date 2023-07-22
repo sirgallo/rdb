@@ -1,4 +1,4 @@
-package shared
+package system
 
 
 func DetermineLastLogIdxAndTerm [T comparable](replog []*LogEntry[T]) (int64, int64) {
@@ -15,4 +15,10 @@ func DetermineLastLogIdxAndTerm [T comparable](replog []*LogEntry[T]) (int64, in
 	}
 
 	return lastLogIndex, lastLogTerm
+}
+
+func SetStatus [T comparable](system *System[T], isAlive bool) {
+	if isAlive { 
+		system.Status = Alive 
+	} else { system.Status = Dead }
 }

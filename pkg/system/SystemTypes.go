@@ -1,4 +1,4 @@
-package shared
+package system
 
 
 type SystemState string
@@ -9,6 +9,13 @@ const (
 	Follower  SystemState = "follower"
 )
 
+type SystemStatus int
+
+const (
+	Dead  SystemStatus = 0
+	Alive SystemStatus = 1
+)
+
 type LogEntry [T comparable] struct {
 	Index   int64
 	Term    int64
@@ -17,6 +24,7 @@ type LogEntry [T comparable] struct {
 
 type System [T comparable] struct {
 	Host        string
+	Status			SystemStatus
 	
 	State       SystemState
 	CurrentTerm int64

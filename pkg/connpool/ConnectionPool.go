@@ -53,3 +53,19 @@ func (cp *ConnectionPool) PutConnection(addr string, connection *grpc.ClientConn
 	
 	return false, nil
 }
+
+func (cp *ConnectionPool) CloseAllConnections(addr string) (bool, error) {
+	connections, loaded := cp.connections.Load(addr)
+	if loaded {
+		for _, conn := range connections.([]*grpc.ClientConn) {
+			if conn != nil {
+				closeErr := conn.Close()
+				if closeErr != nil { return false, closeErr }
+			}
+		}
+
+		return true , nil
+	}
+	
+	return false , nil
+}

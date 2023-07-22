@@ -4,15 +4,15 @@ import "time"
 
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/lerpc"
-import "github.com/sirgallo/raft/pkg/shared"
+import "github.com/sirgallo/raft/pkg/system"
 
 
 type LeaderElectionOpts [T comparable] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 
-	CurrentSystem *shared.System[T]
-	SystemsList   []*shared.System[T]
+	CurrentSystem *system.System[T]
+	SystemsList   []*system.System[T]
 }
 
 type LeaderElectionService [T comparable] struct {
@@ -21,8 +21,8 @@ type LeaderElectionService [T comparable] struct {
 	ConnectionPool *connpool.ConnectionPool
 
 	// Persistent State
-	CurrentSystem *shared.System[T]
-	SystemsList   []*shared.System[T]
+	CurrentSystem *system.System[T]
+	SystemsList   []*system.System[T]
 
 	// Module Level State
 	VotedFor string

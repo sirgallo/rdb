@@ -8,7 +8,7 @@ import "time"
 import "google.golang.org/grpc"
 
 import "github.com/sirgallo/raft/pkg/replogrpc"
-import "github.com/sirgallo/raft/pkg/shared"
+import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
@@ -18,7 +18,7 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		SystemsList: opts.SystemsList,
-		AppendLogSignal: make(chan *shared.LogEntry[T], 10000),
+		AppendLogSignal: make(chan *system.LogEntry[T], 10000),
 		LeaderAcknowledgedSignal: make(chan bool),
 	}
 }
@@ -37,13 +37,13 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 	for {
 		select {
 			case newLog :=<- rlService.AppendLogSignal:
-				if rlService.CurrentSystem.State == shared.Leader {
+				if rlService.CurrentSystem.State == system.Leader {
 					rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 					rlService.ReplicateLogs(newLog)
 				}
 			case <- time.After(HeartbeatIntervalInMs * time.Millisecond):
-				if rlService.CurrentSystem.State == shared.Leader {
-					log.Printf("host %s sending heartbeats...", rlService.CurrentSystem.Host)
+				if rlService.CurrentSystem.State == system.Leader {
+					log.Println("sending heartbeats...")
 					rlService.Heartbeat()
 				}
 		}
@@ -52,7 +52,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 
 func (rlService *ReplicatedLogService[T]) Heartbeat() {
 	sysHostPtr := &rlService.CurrentSystem.Host
-	lastLogIndex, lastLogTerm := shared.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	
 	request := &replogrpc.AppendEntry{
 		Term: rlService.CurrentSystem.CurrentTerm,
@@ -66,9 +66,9 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 	rlService.sendAppendEntryRPC(request)
 }
 
-func (rlService *ReplicatedLogService[T]) ReplicateLogs(*shared.LogEntry[T]) {
+func (rlService *ReplicatedLogService[T]) ReplicateLogs(*system.LogEntry[T]) {
 	sysHostPtr := &rlService.CurrentSystem.Host
-	lastLogIndex, lastLogTerm := shared.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	
 	request := &replogrpc.AppendEntry{
 		Term: rlService.CurrentSystem.CurrentTerm,
@@ -86,36 +86,67 @@ func (rlService *ReplicatedLogService[T]) sendAppendEntryRPC(request *replogrpc.
 	var appendEntryWG sync.WaitGroup
 
 	for _, sys := range rlService.SystemsList {
-		appendEntryWG.Add(1)
+		if sys.Status == system.Alive {
+			appendEntryWG.Add(1)
 
-		go func(sys *shared.System[T]) {
-			defer appendEntryWG.Done()
+			go func(sys *system.System[T]) {
+				defer appendEntryWG.Done()
+	
+				conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
+				if connErr != nil { log.Fatalf("Failed to connect to %s: %v", sys.Host + rlService.Port, connErr) }
+	
+				client := replogrpc.NewRepLogServiceClient(conn)
+	
+				_, reqErr := client.AppendEntryRPC(context.Background(), request)
+				if reqErr != nil { log.Println("failed AppendEntryRPC -->", reqErr) }
+			
+				appendEntryRPC := func () (*replogrpc.AppendEntryResponse, error) {
+					res, err := client.AppendEntryRPC(context.Background(), request)
+					if err != nil { return utils.GetZero[*replogrpc.AppendEntryResponse](), err }
+					return res, nil
+				}
+	
+				maxRetries := 5
+				expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
+				expBackoff := utils.NewExponentialBackoffStrat[*replogrpc.AppendEntryResponse](expOpts)
+	
+				res, err := expBackoff.PerformBackoff(appendEntryRPC)
+				if err != nil { 
+					log.Printf("setting sytem %s to status dead", sys.Host)
+					
+					system.SetStatus[T](sys, false)
 
-			conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
-			if connErr != nil { log.Fatalf("Failed to connect to %s: %v", sys.Host + rlService.Port, connErr) }
+					_, closeErr := rlService.ConnectionPool.CloseAllConnections(sys.Host)
+					if closeErr != nil { log.Println("close connection error", closeErr) }
 
-			client := replogrpc.NewRepLogServiceClient(conn)
+					return
+				}
 
-			_, reqErr := client.AppendEntryRPC(context.Background(), request)
-			if reqErr != nil { log.Println("failed AppendEntryRPC -->", reqErr) }
-		
-			rlService.ConnectionPool.PutConnection(sys.Host, conn)
-		}(sys)
+				if res.Success { log.Printf("AppendEntryRPC success on system: %s\n", sys.Host)}
+	
+				rlService.ConnectionPool.PutConnection(sys.Host, conn)
+			}(sys)
+		}
 	}
 
 	appendEntryWG.Wait()
 }
 
 func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
+	sys := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
+		return sys.Host == req.LeaderId 
+	})[0]
+	system.SetStatus[T](sys, true)
+
 	var resp *replogrpc.AppendEntryResponse
-	
+
 	if req.Term < rlService.CurrentSystem.CurrentTerm {
 		resp = &replogrpc.AppendEntryResponse{
 			Success: false,
 		}
 	}
 
-	lastLogIndex, _ := shared.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 
 	if req.PrevLogIndex >= lastLogIndex || rlService.CurrentSystem.Replog[req.PrevLogIndex].Term != req.PrevLogTerm {
 		resp = &replogrpc.AppendEntryResponse{
@@ -130,7 +161,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 			rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[entry.Index:] 
 		}
 
-		newLog := &shared.LogEntry[T]{
+		newLog := &system.LogEntry[T]{
 			Term: entry.Term,
 		}
 

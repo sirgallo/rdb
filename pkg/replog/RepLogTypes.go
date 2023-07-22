@@ -2,7 +2,7 @@ package replog
 
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/replogrpc"
-import "github.com/sirgallo/raft/pkg/shared"
+import "github.com/sirgallo/raft/pkg/system"
 
 
 const HeartbeatIntervalInMs = 50
@@ -11,8 +11,8 @@ type ReplicatedLogOpts [T comparable] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 
-	CurrentSystem *shared.System[T]
-	SystemsList   []*shared.System[T]
+	CurrentSystem *system.System[T]
+	SystemsList   []*system.System[T]
 }
 
 type ReplicatedLogService [T comparable] struct {
@@ -21,11 +21,11 @@ type ReplicatedLogService [T comparable] struct {
 	ConnectionPool *connpool.ConnectionPool
 
 	// Persistent State
-	CurrentSystem *shared.System[T]
-	SystemsList   []*shared.System[T]
+	CurrentSystem *system.System[T]
+	SystemsList   []*system.System[T]
 
 	// Module Specific
 
-	AppendLogSignal chan *shared.LogEntry[T]
+	AppendLogSignal chan *system.LogEntry[T]
 	LeaderAcknowledgedSignal chan bool
 }

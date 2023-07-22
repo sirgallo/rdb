@@ -2,7 +2,7 @@ package service
 
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
-import "github.com/sirgallo/raft/pkg/shared"
+import "github.com/sirgallo/raft/pkg/system"
 
 
 type RaftServiceOpts struct {
@@ -13,8 +13,8 @@ type RaftServiceOpts struct {
 type RaftService [T comparable] struct {
 	// Persistent State
 	CurrentTerm   *int64
-	CurrentSystem *shared.System[T]
-	SystemList    []*shared.System[T]
+	CurrentSystem *system.System[T]
+	SystemList    []*system.System[T]
 
 	LeaderElection *leaderelection.LeaderElectionService[T]
 	ReplicatedLog  *replog.ReplicatedLogService[T]
