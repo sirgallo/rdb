@@ -12,7 +12,7 @@ message RequestVote {
   int64 CurrentTerm = 1;
   string CandidateId = 2;
   int64 LastLogIndex = 3;
-	int64 LastLogTerm = 4;
+  int64 LastLogTerm = 4;
 }
 
 message RequestVoteResponse {
