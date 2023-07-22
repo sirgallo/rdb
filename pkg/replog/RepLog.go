@@ -133,6 +133,11 @@ func (rlService *ReplicatedLogService[T]) sendAppendEntryRPC(request *replogrpc.
 }
 
 func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
+	min := func (idx1, idx2 int64) int64 {
+		if idx1 < idx2 { return idx1 }
+		return idx2
+	}
+	
 	sys := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
 		return sys.Host == req.LeaderId 
 	})[0]
@@ -178,9 +183,4 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	}
 
 	return resp, nil
-}
-
-func min(a, b int64) int64 {
-	if a < b { return a }
-	return b
 }
