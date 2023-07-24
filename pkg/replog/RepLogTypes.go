@@ -26,6 +26,11 @@ type ReplicatedLogService [T comparable] struct {
 
 	// Module Specific
 
-	AppendLogSignal chan *system.LogEntry[T]
+	AppendLogSignal chan T
 	LeaderAcknowledgedSignal chan bool
+}
+
+type ReplicatedLogRequest struct {
+	Host string
+	AppendEntry *replogrpc.AppendEntry
 }

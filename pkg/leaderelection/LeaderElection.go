@@ -62,11 +62,11 @@ func (leService *LeaderElectionService[T]) Election() {
 		return sys.Status == system.Alive 
 	})
 
-	totalSystems := len(aliveSystems) + 1
-	minimumVotes := (totalSystems / 2) + 1
+	totalAliveSystems := len(aliveSystems) + 1
+	minimumVotes := (totalAliveSystems / 2) + 1
 
 	totalVotes := leService.BroadcastVotes()
-	
+
 	if totalVotes >= minimumVotes {
 		leService.CurrentSystem.State = system.Leader
 		log.Printf("service with hostname: %s has been elected leader\n", leService.CurrentSystem.Host)
@@ -148,9 +148,7 @@ func (leService *LeaderElectionService[T]) BroadcastVotes() int {
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
 	log.Printf("req current term: %d, current system current term: %d\n", req.CurrentTerm, leService.CurrentSystem.CurrentTerm)
 	
-	sys := utils.Filter[*system.System[T]](leService.SystemsList, func (sys *system.System[T]) bool { 
-		return sys.Host == req.CandidateId 
-	})[0]
+	sys := utils.Filter[*system.System[T]](leService.SystemsList, func (sys *system.System[T]) bool { return sys.Host == req.CandidateId })[0]
 	system.SetStatus[T](sys, true)
 
 	if req.CurrentTerm >= leService.CurrentSystem.CurrentTerm && (leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId) {
@@ -177,6 +175,10 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 
 	return voteRejected, nil
 }
+
+
+//========================================== helper methods
+
 
 func initializeTimeout() time.Duration {
 	timeout := rand.Intn(151) + 150

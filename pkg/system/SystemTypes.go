@@ -31,4 +31,6 @@ type System [T comparable] struct {
 	CommitIndex int64
 
 	Replog []*LogEntry[T]
+
+	NextIndex  int64 // next index to send to a server
 }

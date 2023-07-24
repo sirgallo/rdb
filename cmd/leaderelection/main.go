@@ -3,7 +3,6 @@ package main
 import "log"
 import "net"
 import "os"
-import "strconv"
 
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
@@ -19,7 +18,7 @@ func main() {
 
 	port := 54321
 
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	listener, err := net.Listen("tcp", utils.NormalizePort(port))
 	if err != nil { log.Fatalf("Failed to listen: %v", err) }
 	
 	currentSystem := &system.System[string]{
@@ -30,11 +29,11 @@ func main() {
 	}
 
 	systemsList := []*system.System[string]{
-		{ Host: "lesrv1", Status: system.Alive },
-		{ Host: "lesrv2", Status: system.Alive },
-		{ Host: "lesrv3", Status: system.Alive },
-		{ Host: "lesrv4", Status: system.Alive },
-		{ Host: "lesrv5", Status: system.Alive },
+		{ Host: "lesrv1", Status: system.Alive, NextIndex: -1 },
+		{ Host: "lesrv2", Status: system.Alive, NextIndex: -1 },
+		{ Host: "lesrv3", Status: system.Alive, NextIndex: -1 },
+		{ Host: "lesrv4", Status: system.Alive, NextIndex: -1 },
+		{ Host: "lesrv5", Status: system.Alive, NextIndex: -1 },
 	}
 
 	cpOpts := connpool.ConnectionPoolOpts{
