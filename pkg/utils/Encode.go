@@ -9,7 +9,7 @@ func EncodeStructToString [T comparable](data T) (string, error) {
 	return string(encoded), nil
 }
 
-func DecodeStringToStruct[T comparable](encoded string) (*T, error) {
+func DecodeStringToStruct [T comparable](encoded string) (*T, error) {
 	data := new(T)
 	err := json.Unmarshal([]byte(encoded), data)
 	if err != nil { return nil, err }
