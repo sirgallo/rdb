@@ -27,7 +27,6 @@ func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientC
 	newConn, connErr := grpc.Dial(addr + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if connErr != nil { return nil, connErr }
 
-
 	emptyConns, loaded := cp.connections.LoadOrStore(addr, []*grpc.ClientConn{newConn})
 	if loaded {
 		connections := emptyConns.([]*grpc.ClientConn)
