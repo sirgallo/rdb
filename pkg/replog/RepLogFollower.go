@@ -38,29 +38,31 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	rlService.LeaderAcknowledgedSignal <- true
 
-	for _, entry := range req.Entries {
-		if rlService.checkIndex(entry.Index) {
-			if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term { 
-				rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index] 
+	if req.Entries != nil {
+		for _, entry := range req.Entries {
+			if rlService.checkIndex(entry.Index) {
+				if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term { 
+					rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index] 
+				}
 			}
+	
+			cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
+			if decErr != nil { log.Println("error on decode -->", decErr) }
+			newLog := &system.LogEntry[T]{
+				Index: entry.Index,
+				Term: entry.Term,
+				Command: *cmd,
+			}
+	
+			rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 		}
-
-		cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
-		if decErr != nil { log.Println("error on decode -->", decErr) }
-		newLog := &system.LogEntry[T]{
-			Index: entry.Index,
-			Term: entry.Term,
-			Command: *cmd,
-		}
-
-		rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
-	}
-
-	if rlService.checkIndex(req.LeaderCommitIndex) {
-		if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {
-			index := int64(len(rlService.CurrentSystem.Replog) - 1)
-			rlService.CurrentSystem.CommitIndex = min(req.LeaderCommitIndex, index)
-			rlService.CommitLogsFollower()
+	
+		if rlService.checkIndex(req.LeaderCommitIndex) {
+			if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {
+				index := int64(len(rlService.CurrentSystem.Replog) - 1)
+				rlService.CurrentSystem.CommitIndex = min(req.LeaderCommitIndex, index)
+				rlService.CommitLogsFollower()
+			}
 		}
 	}
 
