@@ -18,6 +18,7 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		SystemsList: opts.SystemsList,
 		AppendLogSignal: make(chan T),
 		LeaderAcknowledgedSignal: make(chan bool),
+		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
 	}
 }
 
@@ -61,8 +62,7 @@ func (rlService *ReplicatedLogService[T]) previousLogTerm(nextIndex int64) int64
 	return repLog.Term
 }
 
-/*
-func (rlService *ReplicatedLogService[T]) deferenceLogEntries() []system.LogEntry[T] {
+func (rlService *ReplicatedLogService[T]) DeferenceLogEntries() []system.LogEntry[T] {
 	var logEntries []system.LogEntry[T]
 	for _, log := range rlService.CurrentSystem.Replog {
 		logEntries = append(logEntries, *log)
@@ -70,4 +70,3 @@ func (rlService *ReplicatedLogService[T]) deferenceLogEntries() []system.LogEntr
 
 	return logEntries
 }
-*/

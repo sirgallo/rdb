@@ -36,6 +36,7 @@ func main() {
 		Host: hostname,
 		CurrentTerm: 0,
 		CommitIndex: 0,
+		LastApplied: 0,
 		Replog: []*system.LogEntry[CommandEntry]{},
 	}
 
@@ -97,6 +98,19 @@ func main() {
 			
 			randomNumber := rand.Intn(96) + 5
 			time.Sleep(time.Duration(randomNumber) * time.Millisecond)
+		}
+	}()
+
+	go func () {
+		for {
+			logs := <- rlService.LogCommitChannel
+			completedLogs := []replog.LogCommitChannelEntry[CommandEntry]{}
+			for _, log := range logs {
+				log.Complete = true
+				completedLogs = append(completedLogs, log)
+			}
+			
+			rlService.LogCommitChannel <- completedLogs
 		}
 	}()
 	

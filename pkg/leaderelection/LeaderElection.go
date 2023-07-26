@@ -62,8 +62,6 @@ func (leService *LeaderElectionService[T]) Election() {
 		return sys.Status == system.Alive 
 	})
 
-	log.Println("systems in election", leService.deferenceSystems())
-
 	totalAliveSystems := len(aliveSystems) + 1
 	minimumVotes := (totalAliveSystems / 2) + 1
 
@@ -72,10 +70,7 @@ func (leService *LeaderElectionService[T]) Election() {
 	if totalVotes >= minimumVotes {
 		leService.CurrentSystem.State = system.Leader
 		log.Printf("service with hostname: %s has been elected leader\n", leService.CurrentSystem.Host)
-	} else { 
-		leService.CurrentSystem.State = system.Follower 
-		log.Println("I am follower")
-	}
+	} else { leService.CurrentSystem.State = system.Follower }
 
 	leService.VotedFor = utils.GetZero[string]()
 	leService.Timeout = initializeTimeout()	// re-init timeout after election
@@ -183,13 +178,4 @@ func initializeTimeout() time.Duration {
 	timeoutDuration := time.Duration(timeout) * time.Millisecond
 
 	return timeoutDuration
-}
-
-func (leService *LeaderElectionService[T]) deferenceSystems() []system.System[T] {
-	var systems []system.System[T]
-	for _, sys := range leService.SystemsList {
-		systems = append(systems, *sys)
-	}
-
-	return systems
 }

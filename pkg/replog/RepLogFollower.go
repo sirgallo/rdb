@@ -56,11 +56,14 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 	}
 
-	// log.Println("replog -->", rlService.deferenceLogEntries())
+	// log.Println("replog -->", rlService.DeferenceLogEntries())
 
-	if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {
-		index := int64(len(rlService.CurrentSystem.Replog) - 1)
-		rlService.CurrentSystem.CommitIndex = min(req.LeaderCommitIndex, index)
+	if rlService.checkIndex(req.LeaderCommitIndex) {
+		if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {
+			index := int64(len(rlService.CurrentSystem.Replog) - 1)
+			rlService.CurrentSystem.CommitIndex = min(req.LeaderCommitIndex, index)
+			rlService.CommitLogsFollower()
+		}
 	}
 
 	lastLogIndexAfterAppend, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
