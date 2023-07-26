@@ -28,7 +28,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 
-	if req.PrevLogIndex >= lastLogIndex || rlService.CurrentSystem.Replog[req.PrevLogIndex].Term != req.PrevLogTerm {
+	if rlService.checkIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term != req.PrevLogTerm {
 		resp = &replogrpc.AppendEntryResponse{
 			Term: rlService.CurrentSystem.CurrentTerm,
 			LatestLogIndex: lastLogIndex,
@@ -41,7 +41,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	for _, entry := range req.Entries {
 		if rlService.checkIndex(entry.Index) {
 			if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term { 
-				rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[entry.Index:] 
+				rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index] 
 			}
 		}
 
@@ -55,8 +55,6 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 		rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 	}
-
-	// log.Println("replog -->", rlService.DeferenceLogEntries())
 
 	if rlService.checkIndex(req.LeaderCommitIndex) {
 		if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {

@@ -144,7 +144,7 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 	sys := utils.Filter[*system.System[T]](leService.SystemsList, func (sys *system.System[T]) bool { return sys.Host == req.CandidateId })[0]
 	system.SetStatus[T](sys, true)
 
-	if req.CurrentTerm >= leService.CurrentSystem.CurrentTerm && (leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId) {
+	if leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId {
 		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
 		
 		if req.LastLogIndex >= lastLogIndex && req.LastLogTerm >= lastLogTerm {
@@ -178,4 +178,13 @@ func initializeTimeout() time.Duration {
 	timeoutDuration := time.Duration(timeout) * time.Millisecond
 
 	return timeoutDuration
+}
+
+func (leService *LeaderElectionService[T]) DeferenceSystems() []system.System[T] {
+	var systems []system.System[T]
+	for _, sys := range leService.SystemsList {
+		systems = append(systems, *sys)
+	}
+
+	return systems
 }

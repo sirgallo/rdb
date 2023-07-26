@@ -59,8 +59,6 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 
 	rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 
-	// log.Println("rep log on leader -->", rlService.DeferenceLogEntries())
-
 	requests := []ReplicatedLogRequest{}
 
 	aliveSystems := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
@@ -157,13 +155,13 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requests []Rep
 				return
 			}
 
-			if res.Success { 
-				// log.Printf("AppendEntryRPC success on system: %s\n", req.Host) 
+			if res.Success {
 				successfulReplies += 1
 			} else {
 				if res.Term > rlService.CurrentSystem.CurrentTerm { 
 					rlService.CurrentSystem.State = system.Follower
 					higherTermDiscovered <- true
+					
 					return
 				}
 			}
