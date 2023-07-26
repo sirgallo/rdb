@@ -62,21 +62,26 @@ func (leService *LeaderElectionService[T]) Election() {
 		return sys.Status == system.Alive 
 	})
 
+	log.Println("systems in election", leService.deferenceSystems())
+
 	totalAliveSystems := len(aliveSystems) + 1
 	minimumVotes := (totalAliveSystems / 2) + 1
 
-	totalVotes := leService.BroadcastVotes()
+	totalVotes := leService.broadcastVotes()
 
 	if totalVotes >= minimumVotes {
 		leService.CurrentSystem.State = system.Leader
 		log.Printf("service with hostname: %s has been elected leader\n", leService.CurrentSystem.Host)
-	} else { leService.CurrentSystem.State = system.Follower }
+	} else { 
+		leService.CurrentSystem.State = system.Follower 
+		log.Println("I am follower")
+	}
 
 	leService.VotedFor = utils.GetZero[string]()
 	leService.Timeout = initializeTimeout()	// re-init timeout after election
 }
 
-func (leService *LeaderElectionService[T]) BroadcastVotes() int {
+func (leService *LeaderElectionService[T]) broadcastVotes() int {
 	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
 	request := &lerpc.RequestVote{
 		CurrentTerm:  leService.CurrentSystem.CurrentTerm,
@@ -115,19 +120,12 @@ func (leService *LeaderElectionService[T]) BroadcastVotes() int {
 				res, err := expBackoff.PerformBackoff(requestVoteRPC)
 				if err != nil { 
 					log.Printf("setting sytem %s to status dead", sys.Host)
-					
 					system.SetStatus[T](sys, false)
-
-					_, closeErr := leService.ConnectionPool.CloseAllConnections(sys.Host)
-					if closeErr != nil { log.Println("close connection error", closeErr) }
 
 					return 
 				}
 	
-				if res.Term > leService.CurrentSystem.CurrentTerm { 
-					leService.CurrentSystem.CurrentTerm = res.Term
-				}
-	
+				if res.Term > leService.CurrentSystem.CurrentTerm { leService.CurrentSystem.CurrentTerm = res.Term }
 				if res.VoteGranted { totalVotes += 1 }
 	
 				leService.ConnectionPool.PutConnection(sys.Host, conn)
@@ -185,4 +183,13 @@ func initializeTimeout() time.Duration {
 	timeoutDuration := time.Duration(timeout) * time.Millisecond
 
 	return timeoutDuration
+}
+
+func (leService *LeaderElectionService[T]) deferenceSystems() []system.System[T] {
+	var systems []system.System[T]
+	for _, sys := range leService.SystemsList {
+		systems = append(systems, *sys)
+	}
+
+	return systems
 }

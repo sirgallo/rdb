@@ -29,8 +29,9 @@ type System [T comparable] struct {
 	State       SystemState
 	CurrentTerm int64
 	CommitIndex int64
+	LastApplied int64
 
-	Replog []*LogEntry[T]
+	Replog      []*LogEntry[T]
 
 	NextIndex  int64 // next index to send to a server
 }

@@ -20,5 +20,8 @@ func DetermineLastLogIdxAndTerm [T comparable](replog []*LogEntry[T]) (int64, in
 func SetStatus [T comparable](system *System[T], isAlive bool) {
 	if isAlive { 
 		system.Status = Alive 
-	} else { system.Status = Dead }
+	} else { 
+		system.Status = Dead 
+		system.NextIndex = -1
+	}
 }

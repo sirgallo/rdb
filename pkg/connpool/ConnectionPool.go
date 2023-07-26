@@ -3,6 +3,7 @@ package connpool
 import "errors"
 
 import "google.golang.org/grpc"
+import "google.golang.org/grpc/connectivity"
 import "google.golang.org/grpc/credentials/insecure"
 
 
@@ -16,21 +17,20 @@ func NewConnectionPool(opts ConnectionPoolOpts) *ConnectionPool {
 func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientConn, error) {
 	connections, loaded := cp.connections.Load(addr)
 	if loaded {
-		for _, conn := range connections.([]*grpc.ClientConn) {
-			if conn != nil { return conn, nil }
-		}
-
 		if len(connections.([]*grpc.ClientConn)) >= cp.maxConn { return nil, errors.New("max connections reached") }
+
+		for _, conn := range connections.([]*grpc.ClientConn) {
+			if conn != nil && conn.GetState() == connectivity.Ready { return conn, nil }
+		}
 	}
 
 	newConn, connErr := grpc.Dial(addr + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if connErr != nil { return nil, connErr }
 
-	loadedConns, loaded := cp.connections.LoadOrStore(addr, []*grpc.ClientConn{newConn})
-	if loaded {
-		connections := loadedConns.([]*grpc.ClientConn)
-		if len(connections) >= cp.maxConn { return nil, errors.New("max connections reached") }
 
+	emptyConns, loaded := cp.connections.LoadOrStore(addr, []*grpc.ClientConn{newConn})
+	if loaded {
+		connections := emptyConns.([]*grpc.ClientConn)
 		cp.connections.Store(addr, append(connections, newConn))
 	}
 	
@@ -41,31 +41,12 @@ func (cp *ConnectionPool) PutConnection(addr string, connection *grpc.ClientConn
 	connections, loaded := cp.connections.Load(addr)
 	if loaded {
 		for _, conn := range connections.([]*grpc.ClientConn) {
-			if conn == connection {
-				conn.ResetConnectBackoff()
-				return true, nil
-			}
+			if conn == connection { return true, nil }
 		}
-
-		closeErr := connection.Close()
-		if closeErr != nil { return false, closeErr }
 	}
+
+	closeErr := connection.Close()
+	if closeErr != nil { return false, closeErr }
 	
 	return false, nil
-}
-
-func (cp *ConnectionPool) CloseAllConnections(addr string) (bool, error) {
-	connections, loaded := cp.connections.Load(addr)
-	if loaded {
-		for _, conn := range connections.([]*grpc.ClientConn) {
-			if conn != nil {
-				closeErr := conn.Close()
-				if closeErr != nil { return false, closeErr }
-			}
-		}
-
-		return true , nil
-	}
-	
-	return false , nil
 }

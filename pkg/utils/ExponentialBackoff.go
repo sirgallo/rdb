@@ -9,22 +9,20 @@ const DefaultMaxRetries = -1 // let's use this to represent unlimited retries
 
 type ExpBackoffOpts struct {
 	TimeoutInMilliseconds int
-	MaxRetries *int // optional field, use a pointer
+	MaxRetries            *int // optional field, use a pointer
 }
 
 type ExponentialBackoffStrat [T comparable] struct {
-	depth int
+	depth          int
 	initialTimeout int
 	currentTimeout int
-	maxRetries *int
+	maxRetries     *int
 }
 
 
 func NewExponentialBackoffStrat [T comparable](opts ExpBackoffOpts) *ExponentialBackoffStrat[T] {
 	maxRetries := DefaultMaxRetries
-	if opts.MaxRetries != nil {
-		maxRetries = *opts.MaxRetries
-	}
+	if opts.MaxRetries != nil { maxRetries = *opts.MaxRetries }
 
 	return &ExponentialBackoffStrat[T]{
 		depth: 1, 

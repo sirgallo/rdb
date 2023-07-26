@@ -8,6 +8,9 @@ One of the major components of [Raft Consensus](https://raft.github.io/raft.pdf)
 
 ## Design
 
+
+### Replicated Log
+
 In this doc, the focus will be on the `AppendEntryRPC`, which is the remote procedure call used to request votes from other systems during an election phase.
 
 The general layout of the request is:
@@ -23,6 +26,29 @@ message AppendEntry {
 }
 ```
 
+1. Term --> the current term on the leader
+2. LeaderId --> the unique identifier for the leader
+3. PrevLogIndex --> the index of the log being appended for NextIndex
+4. PrevLogTerm --> the term of the log being appended for NextIndex
+5. Entries --> the entries since previous log index being applied
+6. LeaderCommitIndex --> the index of the latest log applied to the state machine by the leader
+
+The `LogEntry` message consists of:
+
+```proto
+message LogEntry {
+  int64 Index = 1;
+  int64 Term = 2;
+  string Command = 3;
+}
+```
+
+where the index is the index of the log, the term is the current term of the applied log, and the command is the command, encoded to string, that mutates the state machine. The command can be of struct type `T`, where it contains the necessary actions with a data payload to update the state machine.
+
+
+### Heartbeat
+
+When a leader is elected, it begins sending heartbeats to each node at a set inverval until a new command is entered from the client and a log is created. Any `AppendEntryRPC` can act as a heartbeat, but if no logs are available, the leader will send a heartbeat with no entries so follower nodes do not begin a new election.
 
 
 ## Algorithm
@@ -30,7 +56,7 @@ message AppendEntry {
 The basic algorithm is as follows:
 
 ```
-Leader node in the cluster
+Leader node in the cluster -->
 
   if no new logs are added to replicated log before heartbeat interval:
     broadcast heartbeat to all available nodes in the cluster:
@@ -48,7 +74,7 @@ Leader node in the cluster
 
     continue to next heartbeat or available log
 
-Follower node in the cluster
+Follower node in the cluster -->
 
   if request term is less than the current term of the system:
     return false with the term of the current system
