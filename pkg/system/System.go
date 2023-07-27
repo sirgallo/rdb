@@ -10,7 +10,7 @@ func DetermineLastLogIdxAndTerm [T comparable](replog []*LogEntry[T]) (int64, in
 		lastLogIndex = lastLog.Index
 		lastLogTerm = lastLog.Term
 	} else {
-		lastLogIndex = 0
+		lastLogIndex = -1
 		lastLogTerm = 0
 	}
 
