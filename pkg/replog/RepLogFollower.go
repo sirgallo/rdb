@@ -44,17 +44,17 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 				if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term { 
 					rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index] 
 				}
-			}
+			} else {
+				cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
+				if decErr != nil { log.Println("error on decode -->", decErr) }
+				newLog := &system.LogEntry[T]{
+					Index: entry.Index,
+					Term: entry.Term,
+					Command: *cmd,
+				}
 	
-			cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
-			if decErr != nil { log.Println("error on decode -->", decErr) }
-			newLog := &system.LogEntry[T]{
-				Index: entry.Index,
-				Term: entry.Term,
-				Command: *cmd,
+				rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 			}
-	
-			rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
 		}
 	
 		if rlService.checkIndex(req.LeaderCommitIndex) {

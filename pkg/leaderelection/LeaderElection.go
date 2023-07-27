@@ -139,14 +139,15 @@ func (leService *LeaderElectionService[T]) broadcastVotes() int {
 }
 
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
-	log.Printf("req current term: %d, current system current term: %d\n", req.CurrentTerm, leService.CurrentSystem.CurrentTerm)
-	
 	sys := utils.Filter[*system.System[T]](leService.SystemsList, func (sys *system.System[T]) bool { return sys.Host == req.CandidateId })[0]
 	system.SetStatus[T](sys, true)
 
+	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+
+	log.Printf("req current term: %d, current system current term: %d\n", req.CurrentTerm, leService.CurrentSystem.CurrentTerm)
+	log.Printf("latest log index: %d, rep log length: %d\n", lastLogIndex, len(leService.CurrentSystem.Replog))
+
 	if leService.VotedFor == utils.GetZero[string]() || leService.VotedFor == req.CandidateId {
-		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
-		
 		if req.LastLogIndex >= lastLogIndex && req.LastLogTerm >= lastLogTerm {
 			leService.VotedFor = req.CandidateId
 			leService.CurrentSystem.CurrentTerm = req.CurrentTerm
