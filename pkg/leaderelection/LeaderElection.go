@@ -179,12 +179,3 @@ func initializeTimeout() time.Duration {
 
 	return timeoutDuration
 }
-
-func (leService *LeaderElectionService[T]) DeferenceSystems() []system.System[T] {
-	var systems []system.System[T]
-	for _, sys := range leService.SystemsList {
-		systems = append(systems, *sys)
-	}
-
-	return systems
-}
