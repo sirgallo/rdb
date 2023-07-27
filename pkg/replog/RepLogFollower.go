@@ -38,23 +38,27 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	rlService.LeaderAcknowledgedSignal <- true
 
+	appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) {
+		cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
+		if decErr != nil { log.Println("error on decode -->", decErr) }
+		
+		newLog := &system.LogEntry[T]{
+			Index: entry.Index,
+			Term: entry.Term,
+			Command: *cmd,
+		}
+	
+		rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
+	}
+
 	if req.Entries != nil {
 		for _, entry := range req.Entries {
 			if rlService.checkIndex(entry.Index) {
 				if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term { 
 					rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index] 
+					appendLogToReplicatedLog(entry)
 				}
-			} else {
-				cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
-				if decErr != nil { log.Println("error on decode -->", decErr) }
-				newLog := &system.LogEntry[T]{
-					Index: entry.Index,
-					Term: entry.Term,
-					Command: *cmd,
-				}
-	
-				rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
-			}
+			} else { appendLogToReplicatedLog(entry) }
 		}
 	
 		if rlService.checkIndex(req.LeaderCommitIndex) {
