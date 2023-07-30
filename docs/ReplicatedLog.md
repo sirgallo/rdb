@@ -60,10 +60,10 @@ Leader node in the cluster -->
 
   if no new logs are added to replicated log before heartbeat interval:
     broadcast heartbeat to all available nodes in the cluster:
-      1. if success reply is received, maintain the node status as alive
-      2. otherwise, label node as dead
+      a. if success reply is received, maintain the node status as alive
+      b. otherwise, label node as dead
 
-      continue to next heartbeat or available log
+    continue to next heartbeat or available log
 
   if new log is added to replicated log:
     for each system in the cluster:
