@@ -33,6 +33,10 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 		if err != nil { log.Fatalf("Failed to serve: %v", err) }
 	}()
 
+	rlService.StartReplicatedLogTimeout()
+}
+
+func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	for {
 		select {
 			case newCmd :=<- rlService.AppendLogSignal:

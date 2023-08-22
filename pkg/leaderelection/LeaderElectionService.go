@@ -38,6 +38,10 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 		if err != nil { log.Fatalf("Failed to serve: %v", err) }
 	}()
 
+	leService.StartElectionTimeout()
+}
+
+func (leService *LeaderElectionService[T]) StartElectionTimeout() {
 	for {
 		select {
 			case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
