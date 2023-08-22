@@ -24,10 +24,6 @@ func (rlService *ReplicatedLogService[T]) CommitLogsFollower() error {
 	return nil
 }
 
-
-//========================================== helper methods
-
-
 func (rlService *ReplicatedLogService[T]) commitLogs(logsToBeCommited []*system.LogEntry[T]) error {
 	transform := func (logEntry *system.LogEntry[T]) LogCommitChannelEntry[T] {
 		return LogCommitChannelEntry[T]{
