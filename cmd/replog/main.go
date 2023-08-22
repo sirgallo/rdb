@@ -12,6 +12,7 @@ import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
+
 type CommandEntry struct {
 	Action string
 	Data string
