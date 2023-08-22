@@ -5,9 +5,7 @@ import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-const HeartbeatIntervalInMs = 50
-
-type ReplicatedLogOpts [T comparable] struct {
+type ReplicatedLogOpts [T system.MachineCommands] struct {
 	Port           int
 	ConnectionPool *connpool.ConnectionPool
 
@@ -15,12 +13,12 @@ type ReplicatedLogOpts [T comparable] struct {
 	SystemsList    []*system.System[T]
 }
 
-type LogCommitChannelEntry [T comparable] struct {
+type LogCommitChannelEntry [T system.MachineCommands] struct {
 	LogEntry *system.LogEntry[T]
 	Complete bool
 }
 
-type ReplicatedLogService [T comparable] struct {
+type ReplicatedLogService [T system.MachineCommands] struct {
 	replogrpc.UnimplementedRepLogServiceServer
 	Port           string
 	ConnectionPool *connpool.ConnectionPool
@@ -39,3 +37,6 @@ type ReplicatedLogRequest struct {
 	Host        string
 	AppendEntry *replogrpc.AppendEntry
 }
+
+
+const HeartbeatIntervalInMs = 50

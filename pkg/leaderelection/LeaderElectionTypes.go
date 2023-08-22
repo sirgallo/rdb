@@ -7,7 +7,7 @@ import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-type LeaderElectionOpts [T comparable] struct {
+type LeaderElectionOpts [T system.MachineCommands] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 
@@ -15,7 +15,7 @@ type LeaderElectionOpts [T comparable] struct {
 	SystemsList   []*system.System[T]
 }
 
-type LeaderElectionService [T comparable] struct {
+type LeaderElectionService [T system.MachineCommands] struct {
 	lerpc.UnimplementedLeaderElectionServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool

@@ -5,8 +5,6 @@ import "math"
 import "time"
 
 
-const DefaultMaxRetries = -1 // let's use this to represent unlimited retries
-
 type ExpBackoffOpts struct {
 	TimeoutInMilliseconds int
 	MaxRetries            *int // optional field, use a pointer
@@ -18,6 +16,9 @@ type ExponentialBackoffStrat [T comparable] struct {
 	currentTimeout int
 	maxRetries     *int
 }
+
+
+const DefaultMaxRetries = -1 // let's use this to represent unlimited retries
 
 
 func NewExponentialBackoffStrat [T comparable](opts ExpBackoffOpts) *ExponentialBackoffStrat[T] {
