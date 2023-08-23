@@ -19,14 +19,15 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	var resp *replogrpc.AppendEntryResponse
 
+	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+
 	if req.Term < rlService.CurrentSystem.CurrentTerm {
 		resp = &replogrpc.AppendEntryResponse{
 			Term: rlService.CurrentSystem.CurrentTerm,
+			LatestLogIndex: lastLogIndex,
 			Success: false,
 		}
 	}
-
-	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 
 	if rlService.checkIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term != req.PrevLogTerm {
 		resp = &replogrpc.AppendEntryResponse{

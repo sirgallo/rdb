@@ -41,12 +41,12 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 		select {
 			case newCmd :=<- rlService.AppendLogSignal:
 				if rlService.CurrentSystem.State == system.Leader {
-					rlService.ReplicateLogs(newCmd)
+					go rlService.ReplicateLogs(newCmd)
 				}
 			case <- time.After(HeartbeatIntervalInMs * time.Millisecond):
 				if rlService.CurrentSystem.State == system.Leader {
 					log.Println("sending heartbeats...")
-					rlService.Heartbeat()
+					go rlService.Heartbeat()
 				}
 		}
 	}
