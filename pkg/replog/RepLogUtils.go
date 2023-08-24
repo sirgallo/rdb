@@ -18,7 +18,6 @@ import "github.com/sirgallo/raft/pkg/utils"
 		maybe find a way to get latest network MB/s and avg log size and determine based on this
 */
 
-
 func (rlService *ReplicatedLogService[T]) determineBatchSize() int{
 	return 10000
 }
