@@ -10,7 +10,7 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-//=========================================== RepLog Service
+//=========================================== Leader Election Service
 
 
 /*

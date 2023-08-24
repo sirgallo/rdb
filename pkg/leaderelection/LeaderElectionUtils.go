@@ -4,7 +4,7 @@ import "math/rand"
 import "time"
 
 
-//=========================================== RepLog Utils
+//=========================================== Leader Election Utils
 
 
 /*

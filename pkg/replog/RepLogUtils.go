@@ -11,15 +11,25 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 
 /*
+	Determine Batch Size:
+		TODO: not implemented
+		
+		just use 10000 for testing right now --> TODO, make this dynamic
+		maybe find a way to get latest network MB/s and avg log size and determine based on this
+*/
+
+
+func (rlService *ReplicatedLogService[T]) determineBatchSize() int{
+	return 10000
+}
+
+/*
 	to minimize system and network overhead, requests take only a specified number of logs. 
 */
 
 func (rlService *ReplicatedLogService[T]) truncatedRequests(requests []ReplicatedLogRequest) []ReplicatedLogRequest {
-	// just use 10000 for testing right now --> TODO, make this dynamic
-	batchSize := 10000
-
 	transformLogRequest := func(req ReplicatedLogRequest) ReplicatedLogRequest {
-		logBatches, _ := utils.Chunk[*replogrpc.LogEntry](req.AppendEntry.Entries, batchSize)
+		logBatches, _ := utils.Chunk[*replogrpc.LogEntry](req.AppendEntry.Entries, rlService.determineBatchSize())
 		earliestBatch := logBatches[0]
 		
 		prevLogIndex := req.AppendEntry.PrevLogIndex
@@ -58,12 +68,12 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 /*
 	get the previous term and index for a system in the cluster:
 		NextIndex == -1 
-			--> this is a new system, or one that was declared dead or lost it's replicated log (sys failure, etc.)
+			--> this is a new system, or one that was declared Dead or lost it's replicated log (sys failure, etc.)
 			--> in this situation, get the earliest log index and term available in the replog
 
 		NextIndex > -1
 			--> this is an existing system
-			--> in this situation, get the NextIndex field on the system object (which is tracked through responses from AppendEntryRPCs)
+			--> get the NextIndex field on the system object (which is tracked through responses from AppendEntryRPCs)
 */
 
 func (rlService *ReplicatedLogService[T]) determinePreviousIndexAndTerm(sys *system.System[T]) (int64, int64) {

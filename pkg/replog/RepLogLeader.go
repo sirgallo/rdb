@@ -9,12 +9,12 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-//=========================================== RepLog Service
+//=========================================== RepLog Leader
 
 
 /*
 	Heartbeat:
-		for all systems that have status alive, send an empty AppendEntryRPC to each
+		for all systems that have status Alive, send an empty AppendEntryRPC
 */
 
 func (rlService *ReplicatedLogService[T]) Heartbeat() {

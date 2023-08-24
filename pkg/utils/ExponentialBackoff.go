@@ -5,7 +5,7 @@ import "math"
 import "time"
 
 
-//=========================================== Exponential Backoff
+//=========================================== Exponential Backoff Utils
 
 
 type ExpBackoffOpts struct {

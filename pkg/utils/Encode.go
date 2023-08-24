@@ -3,7 +3,7 @@ package utils
 import "encoding/json"
 
 
-//=========================================== Encode
+//=========================================== Encode/Decode JSON Utils
 
 
 /*
