@@ -16,7 +16,7 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		SystemsList: opts.SystemsList,
-		AppendLogSignal: make(chan T),
+		AppendLogSignal: make(chan T, 100000),
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
 	}
@@ -37,17 +37,31 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 }
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
-	for {
-		select {
-			case newCmd :=<- rlService.AppendLogSignal:
-				if rlService.CurrentSystem.State == system.Leader {
-					go rlService.ReplicateLogs(newCmd)
-				}
-			case <- time.After(HeartbeatIntervalInMs * time.Millisecond):
-				if rlService.CurrentSystem.State == system.Leader {
-					log.Println("sending heartbeats...")
-					go rlService.Heartbeat()
-				}
+	didHeartbeat := make(chan bool)
+	
+	go func() {
+		for {
+			select {
+				case newCmd :=<- rlService.AppendLogSignal:
+					if rlService.CurrentSystem.State == system.Leader {
+						rlService.ReplicateLogs(newCmd)
+					}
+				case <- didHeartbeat:
+					if rlService.CurrentSystem.State == system.Leader {
+						rlService.SyncLogs()
+					}
+			}
 		}
-	}
+	}()
+
+	go func() {
+		for {
+			<- time.After(HeartbeatIntervalInMs * time.Millisecond)
+			if rlService.CurrentSystem.State == system.Leader {
+				log.Println("sending heartbeats...")
+				rlService.Heartbeat()
+				didHeartbeat <- true
+			}
+		}
+	}()
 }
