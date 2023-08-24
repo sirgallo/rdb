@@ -10,6 +10,13 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== RepLog Service
+
+
+/*
+	create a new service instance with passable options
+*/
+
 func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
 	return &ReplicatedLogService[T]{
 		Port: utils.NormalizePort(opts.Port),
@@ -21,6 +28,12 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
 	}
 }
+
+/*
+	start the replicated log module/service:
+		--> launch the grc server for AppendEntryRPC
+		--> start the log timeouts
+*/
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *net.Listener) {
 	srv := grpc.NewServer()
@@ -36,6 +49,16 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 	rlService.StartReplicatedLogTimeout()
 }
 
+/*
+	start the log timeouts:
+		separate go routines:
+			1.) replicated log timeouts
+				--> if a new log is signalled for append to the log, replicate the log to followers
+				--> if no logs are received before a heartbeat, sync all existing followers logs to leader (or attempt for batch size)
+			2.) heart beat timeout
+				--> on a set interval, heartbeat all of the followers in the cluster if leader
+*/
+
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	didHeartbeat := make(chan bool)
 	
@@ -43,13 +66,9 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 		for {
 			select {
 				case newCmd :=<- rlService.AppendLogSignal:
-					if rlService.CurrentSystem.State == system.Leader {
-						rlService.ReplicateLogs(newCmd)
-					}
+					if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
 				case <- didHeartbeat:
-					if rlService.CurrentSystem.State == system.Leader {
-						rlService.SyncLogs()
-					}
+					if rlService.CurrentSystem.State == system.Leader { rlService.SyncLogs() }
 			}
 		}
 	}()

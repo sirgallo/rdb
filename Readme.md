@@ -15,3 +15,5 @@ To learn more, check out [Leader Election](./docs/LeaderElection.md) and [Replic
 All raft applications are in `./cmd`. For more information on running the applications, check out [CMD](./cmd/Readme.md).
 
 Both the `RequestVoteRPC` and `AppendEntryRPC` proto buffer schemas can be found under [proto](./proto).
+
+All functions have been documented with in depth explanations.

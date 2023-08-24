@@ -42,7 +42,6 @@ func main() {
 	}
 
 	cpOpts := connpool.ConnectionPoolOpts{
-		MinConn: 1,
 		MaxConn: 10,
 	}
 

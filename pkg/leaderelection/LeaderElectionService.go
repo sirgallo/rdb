@@ -10,6 +10,14 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== RepLog Service
+
+
+/*
+	create a new service instance with passable options
+	--> initialize state to Follower and initialize a random timeout period for leader election
+*/
+
 func NewLeaderElectionService [T comparable](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
 	leService := &LeaderElectionService[T]{
 		Port:               utils.NormalizePort(opts.Port),
@@ -26,6 +34,12 @@ func NewLeaderElectionService [T comparable](opts *LeaderElectionOpts[T]) *Leade
 	return leService
 }
 
+/*
+	start the replicated log module/service:
+		--> launch the grc server for AppendEntryRPC
+		--> start the leader election timeout
+*/
+
 func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *net.Listener) {
 	log.Println("service timeout period:", leService.Timeout)
 
@@ -40,6 +54,13 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 
 	leService.StartElectionTimeout()
 }
+
+/*
+	start the election timeouts:
+		1.) if a signal is passed indicating that an AppendEntryRPC has been received from a 
+			legitamate leader, reset the election timeout
+		2.) otherwise, on timeout, start the leader election process
+*/
 
 func (leService *LeaderElectionService[T]) StartElectionTimeout() {
 	for {

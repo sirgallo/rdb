@@ -9,6 +9,14 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== RepLog Service
+
+
+/*
+	Heartbeat:
+		for all systems that have status alive, send an empty AppendEntryRPC to each
+*/
+
 func (rlService *ReplicatedLogService[T]) Heartbeat() {
 	sysHostPtr := &rlService.CurrentSystem.Host
 	requests := []ReplicatedLogRequest{}
@@ -34,9 +42,21 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 		}
 	}
 
-	batchedRequests := rlService.batchRequests(requests)
+	batchedRequests := rlService.truncatedRequests(requests)
 	rlService.broadcastAppendEntryRPC(batchedRequests)
 }
+
+/*
+	Replicate Logs:
+		1.) append the new log to the replicated log on the leader,
+			--> index is just the index of the last log + 1
+			--> term is the current term on the leader
+		2.) determine what systems are alive and prepare AppendEntryRPCs for each
+			--> determine the next index of the system that the rpc is prepared for from the system object at NextIndex
+		3.) on responses
+			--> if the leader receives a success signal from the majority of the nodes in the cluster, 
+				commit the logs to the state machine
+*/
 
 func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
@@ -69,16 +89,29 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 		requests = append(requests, request)
 	}
 
-	batchedRequests := rlService.batchRequests(requests)
+	batchedRequests := rlService.truncatedRequests(requests)
 	successfulReplies := rlService.broadcastAppendEntryRPC(batchedRequests)
 	if successfulReplies >= minSuccessfulReplies { rlService.CommitLogsLeader() }
 }
+
+/*
+	Sync Logs:
+		when a heartbeat is received and no logs have been applied to the replicated logs, sync up any systems 
+		where the replicated log is incomplete or incorrect. 
+
+		1.) determine what systems are behind on logs 
+			--> status == Alive
+			--> the NextIndex of the system is behind the commit index of the leader
+				this means it is missing entries that have been safely commited to the state machine
+
+		2.) prepare the AppendEntryRPCs for each system
+*/
 
 func (rlService *ReplicatedLogService[T]) SyncLogs() {
 	requests := []ReplicatedLogRequest{}
 
 	systemsBehind := utils.Filter[*system.System[T]](rlService.SystemsList, func(sys *system.System[T]) bool {
-		if sys.Status == system.Alive && sys.NextIndex != rlService.CurrentSystem.CommitIndex { return true }
+		if sys.Status == system.Alive && sys.NextIndex < rlService.CurrentSystem.CommitIndex { return true }
 		return false
 	})
 
@@ -93,24 +126,40 @@ func (rlService *ReplicatedLogService[T]) SyncLogs() {
 		requests = append(requests, request)
 	}
 
-	batchedRequests := rlService.batchRequests(requests)
+	batchedRequests := rlService.truncatedRequests(requests)
 	rlService.broadcastAppendEntryRPC(batchedRequests)
 }
 
-func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestChunksPerHost [][]ReplicatedLogRequest) int {
+/*
+	Shared Broadcast RPC function:
+		utilized by all three functions above
+	
+		for requests to be broadcasted:
+			1.) send AppendEntryRPCs in parallel to each follower in the cluster
+			2.) in each go routine handling each request, perform exponential backoff on failed requests until max retries
+			3.) 
+				if err: set the system status to dead and return
+				if res:
+					if success: 
+						--> update total successful replies and update the next index of the system to the last log index of the reply
+					else if failure and the reply has higher term than the leader: 
+						--> update the state of the leader to follower, recognize a higher term and thus a more correct log
+						--> signal that a higher term has been discovered and cancel all leftover requests
+*/
+
+func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest) int {
 	var appendEntryWG sync.WaitGroup
 
 	successfulReplies := 0 
 	higherTermDiscovered := make(chan bool, 1)
 
-	for _, reqs := range requestChunksPerHost {
+	for _, reqs := range requestsPerHost {
 		appendEntryWG.Add(1)
 
-		go func(reqs []ReplicatedLogRequest) {
+		go func(req ReplicatedLogRequest) {
 			defer appendEntryWG.Done()
 
-			firstReq := reqs[0]
-			receivingHost := firstReq.Host
+			receivingHost := req.Host
 
 			conn, connErr := rlService.ConnectionPool.GetConnection(receivingHost, rlService.Port)
 			if connErr != nil { log.Fatalf("Failed to connect to %s: %v", receivingHost + rlService.Port, connErr) }
@@ -118,7 +167,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestChunksP
 			client := replogrpc.NewRepLogServiceClient(conn)
 
 			appendEntryRPC := func () (*replogrpc.AppendEntryResponse, error) {
-				res, err := client.AppendEntryRPC(context.Background(), firstReq.AppendEntry)
+				res, err := client.AppendEntryRPC(context.Background(), req.AppendEntry)
 				if err != nil { return utils.GetZero[*replogrpc.AppendEntryResponse](), err }
 				return res, nil
 			}
@@ -164,49 +213,4 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestChunksP
 		default:
 			return successfulReplies
 	}
-}
-
-func (rlService *ReplicatedLogService[T]) determinePreviousIndexAndTerm(sys *system.System[T]) (int64, int64) {
-	var prevLogIndex, prevLogTerm int64
-	
-	if sys.NextIndex == -1 {
-		prevLogIndex = 0
-		if len(rlService.CurrentSystem.Replog) > 0 {
-			prevLogTerm = rlService.CurrentSystem.Replog[0].Term
-		} else {  prevLogTerm = 0 }
-	} else {
-		prevLogIndex = sys.NextIndex
-		prevLogTerm = rlService.previousLogTerm(sys.NextIndex)
-	}
-
-	return prevLogIndex, prevLogTerm
-}
-
-func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex, prevLogTerm int64) *replogrpc.AppendEntry {
-	sysHostPtr := &rlService.CurrentSystem.Host
-
-	transform := func(logEntry *system.LogEntry[T]) *replogrpc.LogEntry {
-		cmd, err := utils.EncodeStructToString[T](logEntry.Command)
-		if err != nil { log.Println("error encoding log struct to string") }
-		
-		return &replogrpc.LogEntry{
-			Index: logEntry.Index,
-			Term: logEntry.Term,
-			Command: cmd,
-		}
-	}
-
-	entriesToSend := rlService.CurrentSystem.Replog[prevLogIndex:]
-	entries := utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transform)
-
-	appendEntry := &replogrpc.AppendEntry{
-		Term: rlService.CurrentSystem.CurrentTerm,
-		LeaderId: *sysHostPtr,
-		PrevLogIndex: prevLogIndex,
-		PrevLogTerm: prevLogTerm,
-		Entries: entries,
-		LeaderCommitIndex: rlService.CurrentSystem.CommitIndex,
-	}
-
-	return appendEntry
 }

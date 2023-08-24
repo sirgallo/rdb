@@ -11,6 +11,18 @@ import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== Raft Service
+
+
+// NOTE: Incomplete
+
+/*
+	initialize both the leader election module and the replicated log module under the same raft service
+	and link together
+
+	initialize the state machine operations/state machine dependency
+*/
+
 func NewRaftService [T any, U string, V comparable](opts RaftServiceOpts[T, U, V]) *RaftService[T, U, V] {	
 	leConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	rlConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
@@ -49,6 +61,12 @@ func NewRaftService [T any, U string, V comparable](opts RaftServiceOpts[T, U, V
 		StateMachineOperations: *smOpMap,
 	}
 }
+
+/*
+	Start Raft Service:
+		start both the leader election and replicated log modules.
+		initialize the state machine dependency and link to the replicated log module for log commits
+*/
 
 func (raft *RaftService[T, U, V]) StartRaftService() {
 	leListener, err := net.Listen("tcp", utils.NormalizePort(raft.Ports.LeaderElection))
