@@ -30,16 +30,13 @@ func (rlService *ReplicatedLogService[T]) truncatedRequests(requests []Replicate
 	transformLogRequest := func(req ReplicatedLogRequest) ReplicatedLogRequest {
 		logBatches, _ := utils.Chunk[*replogrpc.LogEntry](req.AppendEntry.Entries, rlService.determineBatchSize())
 		earliestBatch := logBatches[0]
-		
-		prevLogIndex := req.AppendEntry.PrevLogIndex
-		prevLogTerm := req.AppendEntry.PrevLogTerm
 
 		transformLog := func(entries []*replogrpc.LogEntry) ReplicatedLogRequest {
 			appendEntry := replogrpc.AppendEntry{
 				Term: req.AppendEntry.Term,
 				LeaderId: req.AppendEntry.LeaderId,
-				PrevLogIndex: prevLogIndex,
-				PrevLogTerm: prevLogTerm,
+				PrevLogIndex: req.AppendEntry.PrevLogIndex,
+				PrevLogTerm: req.AppendEntry.PrevLogTerm,
 				Entries: earliestBatch,
 			}
 
@@ -78,7 +75,7 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 func (rlService *ReplicatedLogService[T]) determinePreviousIndexAndTerm(sys *system.System[T]) (int64, int64) {
 	var prevLogIndex, prevLogTerm int64
 	
-	previousLogTerm := func(nextIndex int64) int64 {
+	getLogTermForIndex := func(nextIndex int64) int64 {
 		repLog := rlService.CurrentSystem.Replog[rlService.CurrentSystem.NextIndex]
 		return repLog.Term
 	}
@@ -90,7 +87,7 @@ func (rlService *ReplicatedLogService[T]) determinePreviousIndexAndTerm(sys *sys
 		} else {  prevLogTerm = 0 }
 	} else {
 		prevLogIndex = sys.NextIndex
-		prevLogTerm = previousLogTerm(sys.NextIndex)
+		prevLogTerm = getLogTermForIndex(sys.NextIndex)
 	}
 
 	return prevLogIndex, prevLogTerm

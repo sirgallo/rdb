@@ -60,7 +60,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		}
 	}
 
-	rlService.LeaderAcknowledgedSignal <- true
+	rlService.LeaderAcknowledgedSignal <- true // acknowledge only if truthy
 
 	appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) {
 		cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
