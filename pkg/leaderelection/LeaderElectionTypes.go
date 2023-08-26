@@ -25,8 +25,15 @@ type LeaderElectionService [T system.MachineCommands] struct {
 	SystemsList   []*system.System[T]
 
 	// Module Level State
-	VotedFor string
 	Timeout  time.Duration
+	ElectionTimer *time.Timer
 
 	ResetTimeoutSignal chan bool
+	HeartbeatOnElection chan bool
+}
+
+type LEResponseChannels struct {
+	BroadcastClose *chan struct{}
+	VotesChan *chan int
+	HigherTermDiscovered *chan int64
 }

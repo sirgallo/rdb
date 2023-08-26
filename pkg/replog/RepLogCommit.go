@@ -18,10 +18,10 @@ import "github.com/sirgallo/raft/pkg/utils"
 func (rlService *ReplicatedLogService[T]) CommitLogsLeader() error {
 	logsToBeCommited := rlService.CurrentSystem.Replog[rlService.CurrentSystem.CommitIndex:]
 	commitErr := rlService.commitLogs(logsToBeCommited)
+	
 	rlService.CurrentSystem.CommitIndex = rlService.CurrentSystem.LastApplied
 
 	if commitErr != nil { return commitErr }
-
 	return nil
 }
 
@@ -35,8 +35,8 @@ func (rlService *ReplicatedLogService[T]) CommitLogsFollower() error {
 
 	logsToBeCommited := rlService.CurrentSystem.Replog[start:end]
 	commitErr := rlService.commitLogs(logsToBeCommited)
+	
 	if commitErr != nil { return commitErr }
-
 	return nil
 }
 

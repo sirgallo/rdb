@@ -89,6 +89,13 @@ func main() {
 
 	go func () {
 		for {
+			<- leService.HeartbeatOnElection
+			rlService.ForceHeartbeatSignal <- true
+		}
+	}()
+
+	go func () {
+		for {
 			cmdEntry := &CommandEntry{
 				Action: "insert",
 				Data: "hi!",

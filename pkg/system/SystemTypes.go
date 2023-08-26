@@ -19,12 +19,17 @@ type System [T MachineCommands] struct {
 	CurrentTerm int64
 	CommitIndex int64
 	LastApplied int64
+	VotedFor		string
 
 	Replog      []*LogEntry[T]
 
 	NextIndex  int64 // next index to send to a server
 }
 
+type StateTransitionOpts struct {
+	CurrentTerm *int64
+	VotedFor		*string
+}
 
 const (
 	Leader    SystemState = "leader"

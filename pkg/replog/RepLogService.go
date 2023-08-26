@@ -26,6 +26,7 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		AppendLogSignal: make(chan T, 100000),
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
+		ForceHeartbeatSignal: make(chan bool),
 	}
 }
 
@@ -55,32 +56,33 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 			1.) replicated log timeouts
 				--> if a new log is signalled for append to the log, replicate the log to followers
 				--> if no logs are received before a heartbeat, sync all existing followers logs to leader (or attempt for batch size)
-			2.) heart beat timeout
+			2.) heartbeat timeout
 				--> on a set interval, heartbeat all of the followers in the cluster if leader
 */
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
-	didHeartbeat := make(chan bool)
-	
-	go func() {
-		for {
-			select {
-				case newCmd :=<- rlService.AppendLogSignal:
-					if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
-				case <- didHeartbeat:
-					if rlService.CurrentSystem.State == system.Leader { rlService.SyncLogs() }
-			}
-		}
-	}()
+	rlService.HeartBeatTimer = time.NewTimer(HeartbeatIntervalInMs * time.Millisecond)
 
-	go func() {
-		for {
-			<- time.After(HeartbeatIntervalInMs * time.Millisecond)
+	for {
+		select {
+		
+		case newCmd :=<- rlService.AppendLogSignal:
+			if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
+			rlService.resetTimer()
+		case <- rlService.HeartBeatTimer.C:
 			if rlService.CurrentSystem.State == system.Leader {
 				log.Println("sending heartbeats...")
 				rlService.Heartbeat()
-				didHeartbeat <- true
 			}
+
+			rlService.resetTimer()
+		case <- rlService.ForceHeartbeatSignal:
+			if rlService.CurrentSystem.State == system.Leader {
+				log.Println("sending heartbeats after election...")
+				rlService.Heartbeat()
+			}
+
+			rlService.resetTimer()
 		}
-	}()
+	}
 }

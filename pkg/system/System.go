@@ -1,45 +1,37 @@
 package system
 
+import "log"
+
+import "github.com/sirgallo/raft/pkg/utils"
+
 
 //=========================================== System
 
 
-/*
-	get the last index and term from the replicated log
-	1.) if the log length is greater than 0
-		get the log at the end of the replicated log and return its index and term
-	2.) otherwise
-		we can assume this is a new system, so we default the index to -1 and term to 0
-		to indicate this
-*/
+func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) {
+	sys.State = Follower
+	log.Printf("service with hostname: %s transitioned to follower.\n", sys.Host)
 
-func DetermineLastLogIdxAndTerm [T comparable](replog []*LogEntry[T]) (int64, int64) {
-	logLength := len(replog)
-	var lastLogIndex, lastLogTerm int64
-	
-	if logLength > 0 {
-		lastLog := replog[logLength - 1]
-		lastLogIndex = lastLog.Index
-		lastLogTerm = lastLog.Term
-	} else {
-		lastLogIndex = -1 // -1 symbolizes empty log
-		lastLogTerm = 0
-	}
+	if opts.VotedFor != nil {
+		sys.VotedFor = *opts.VotedFor 
+	} else { sys.ResetVotedFor() }
 
-	return lastLogIndex, lastLogTerm
+	if opts.CurrentTerm != nil { sys.CurrentTerm = *opts.CurrentTerm }
 }
 
-/*
-	the the status of a particular system in the systems list to either Alive or Dead
+func (sys *System[T]) TransitionToCandidate() {
+	sys.State = Candidate
+	sys.CurrentTerm = sys.CurrentTerm + int64(1)
+	sys.VotedFor = sys.Host
 
-	TODO: dynamically add new systems to the list
-*/
+	log.Printf("service with hostname: %s transitioned to candidate, starting election.\n", sys.Host)
+}
 
-func SetStatus [T comparable](system *System[T], isAlive bool) {
-	if isAlive { 
-		system.Status = Alive 
-	} else { 
-		system.Status = Dead 
-		system.NextIndex = -1
-	}
+func (sys *System[T]) TransitionToLeader() {
+	sys.State = Leader
+	log.Printf("service with hostname: %s has been elected leader.\n", sys.Host)
+}
+
+func (sys *System[T]) ResetVotedFor() {
+	sys.VotedFor = utils.GetZero[string]()
 }

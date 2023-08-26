@@ -1,6 +1,7 @@
 package replog
 
 import "log"
+import "time"
 
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -9,11 +10,10 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 //=========================================== RepLog Utils
 
-
 /*
 	Determine Batch Size:
 		TODO: not implemented
-		
+
 		just use 10000 for testing right now --> TODO, make this dynamic
 		maybe find a way to get latest network MB/s and avg log size and determine based on this
 */
@@ -28,8 +28,15 @@ func (rlService *ReplicatedLogService[T]) determineBatchSize() int{
 
 func (rlService *ReplicatedLogService[T]) truncatedRequests(requests []ReplicatedLogRequest) []ReplicatedLogRequest {
 	transformLogRequest := func(req ReplicatedLogRequest) ReplicatedLogRequest {
-		logBatches, _ := utils.Chunk[*replogrpc.LogEntry](req.AppendEntry.Entries, rlService.determineBatchSize())
-		earliestBatch := logBatches[0]
+		// logBatches, _ := utils.Chunk[*replogrpc.LogEntry](req.AppendEntry.Entries, rlService.determineBatchSize())
+		// earliestBatch := logBatches[0]
+		batchSize := rlService.determineBatchSize()
+		
+		var earliestBatch []*replogrpc.LogEntry
+		
+		if len(req.AppendEntry.Entries) <= batchSize {
+			earliestBatch = req.AppendEntry.Entries
+		} else { earliestBatch = req.AppendEntry.Entries[:batchSize - 1] }
 
 		transformLog := func(entries []*replogrpc.LogEntry) ReplicatedLogRequest {
 			appendEntry := replogrpc.AppendEntry{
@@ -37,7 +44,7 @@ func (rlService *ReplicatedLogService[T]) truncatedRequests(requests []Replicate
 				LeaderId: req.AppendEntry.LeaderId,
 				PrevLogIndex: req.AppendEntry.PrevLogIndex,
 				PrevLogTerm: req.AppendEntry.PrevLogTerm,
-				Entries: earliestBatch,
+				Entries: entries,
 			}
 
 			return ReplicatedLogRequest{
@@ -62,38 +69,6 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 }
 
 /*
-	get the previous term and index for a system in the cluster:
-		NextIndex == -1 
-			--> this is a new system, or one that was declared Dead or lost it's replicated log (sys failure, etc.)
-			--> in this situation, get the earliest log index and term available in the replog
-
-		NextIndex > -1
-			--> this is an existing system
-			--> get the NextIndex field on the system object (which is tracked through responses from AppendEntryRPCs)
-*/
-
-func (rlService *ReplicatedLogService[T]) determinePreviousIndexAndTerm(sys *system.System[T]) (int64, int64) {
-	var prevLogIndex, prevLogTerm int64
-	
-	getLogTermForIndex := func(nextIndex int64) int64 {
-		repLog := rlService.CurrentSystem.Replog[rlService.CurrentSystem.NextIndex]
-		return repLog.Term
-	}
-
-	if sys.NextIndex == -1 {
-		prevLogIndex = 0
-		if len(rlService.CurrentSystem.Replog) > 0 {
-			prevLogTerm = rlService.CurrentSystem.Replog[0].Term
-		} else {  prevLogTerm = 0 }
-	} else {
-		prevLogIndex = sys.NextIndex
-		prevLogTerm = getLogTermForIndex(sys.NextIndex)
-	}
-
-	return prevLogIndex, prevLogTerm
-}
-
-/*
 	prepare an AppendEntryRPC:
 		--> determine what entries to get, which will be the previous log index forward for that particular system
 		--> encode the command entries to string
@@ -114,17 +89,49 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex, pr
 		}
 	}
 
-	entriesToSend := rlService.CurrentSystem.Replog[prevLogIndex:]
-	entries := utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
+	var entries []*replogrpc.LogEntry
+	var previousLogIndex, previousLogTerm int64
+
+	if prevLogIndex == -1 {
+		entries = nil
+		previousLogIndex = utils.GetZero[int64]() 
+		previousLogTerm = utils.GetZero[int64]()
+	} else {
+		entriesToSend := rlService.CurrentSystem.Replog[prevLogIndex:]
+		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
+
+		previousLogIndex = prevLogIndex
+		previousLogTerm = prevLogTerm
+	}
 
 	appendEntry := &replogrpc.AppendEntry{
 		Term: rlService.CurrentSystem.CurrentTerm,
 		LeaderId: *sysHostPtr,
-		PrevLogIndex: prevLogIndex,
-		PrevLogTerm: prevLogTerm,
+		PrevLogIndex: previousLogIndex,
+		PrevLogTerm: previousLogTerm,
 		Entries: entries,
 		LeaderCommitIndex: rlService.CurrentSystem.CommitIndex,
 	}
 
 	return appendEntry
+}
+
+func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
+	aliveSystems := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
+		return sys.Status == system.Alive 
+	})
+
+	totAliveSystems := len(aliveSystems) + 1
+	return aliveSystems, (totAliveSystems / 2) + 1
+}
+
+func (rlService *ReplicatedLogService[T]) resetTimer() {
+	if ! rlService.HeartBeatTimer.Stop() {
+    select {
+			case <- rlService.HeartBeatTimer.C:
+			default:
+		}
+	}
+
+	rlService.HeartBeatTimer.Reset(HeartbeatIntervalInMs * time.Millisecond)
 }

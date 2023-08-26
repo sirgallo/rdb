@@ -3,6 +3,7 @@ package replog
 import "context"
 import "log"
 import "sync"
+import "sync/atomic"
 
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -18,32 +19,61 @@ import "github.com/sirgallo/raft/pkg/utils"
 */
 
 func (rlService *ReplicatedLogService[T]) Heartbeat() {
+	rlRespChans := rlService.createRLRespChannels()
 	sysHostPtr := &rlService.CurrentSystem.Host
 	requests := []ReplicatedLogRequest{}
+	aliveSystems, _ := rlService.GetAliveSystemsAndMinSuccessResps()
+	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	
+	if lastLogIndex == -1 {
+		lastLogIndex = utils.GetZero[int64]()
+		lastLogTerm = utils.GetZero[int64]()
+	}
 
-	for _, sys := range rlService.SystemsList {
-		if sys.Status == system.Alive {
-			var request ReplicatedLogRequest
-			
-			request.Host = sys.Host
-
-			prevLogIndex, prevLogTerm := rlService.determinePreviousIndexAndTerm(sys)
-
-			request.AppendEntry = &replogrpc.AppendEntry{
-				Term: rlService.CurrentSystem.CurrentTerm,
-				LeaderId: *sysHostPtr,
-				PrevLogIndex: prevLogIndex,
-				PrevLogTerm: prevLogTerm,
-				Entries: nil,
-				LeaderCommitIndex: rlService.CurrentSystem.CommitIndex,
-			}
-
-			requests = append(requests, request)
+	for _, sys := range aliveSystems {
+		var request ReplicatedLogRequest
+		
+		request.Host = sys.Host
+		request.AppendEntry = &replogrpc.AppendEntry{
+			Term: rlService.CurrentSystem.CurrentTerm,
+			LeaderId: *sysHostPtr,
+			PrevLogIndex: lastLogIndex,
+			PrevLogTerm: lastLogTerm,
+			Entries: nil,
+			LeaderCommitIndex: rlService.CurrentSystem.CommitIndex,
 		}
+
+		requests = append(requests, request)
 	}
 
 	batchedRequests := rlService.truncatedRequests(requests)
-	rlService.broadcastAppendEntryRPC(batchedRequests)
+
+	var hbWG sync.WaitGroup
+
+	hbWG.Add(1)
+	go func() {
+		defer hbWG.Done()
+
+		for {
+			select {
+				case <- *rlRespChans.BroadcastClose:
+					return
+				case <- *rlRespChans.SuccessChan:
+				case <- *rlRespChans.HigherTermDiscovered:
+					log.Println("higher term discovered.")
+					rlService.LeaderAcknowledgedSignal <- true
+					return
+			}
+		}
+	}()
+
+	hbWG.Add(1)
+	go func() {
+		defer hbWG.Done()
+		rlService.broadcastAppendEntryRPC(batchedRequests, rlRespChans)
+	}()
+
+	hbWG.Wait()
 }
 
 /*
@@ -58,9 +88,12 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 				commit the logs to the state machine
 */
 
-func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
-	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-
+func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {	
+	rlRespChans := rlService.createRLRespChannels()
+	aliveSystems, minSuccessfulResps := rlService.GetAliveSystemsAndMinSuccessResps()
+	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	requests := []ReplicatedLogRequest{}
+	
 	newLog := &system.LogEntry[T]{
 		Index: lastLogIndex + 1,
 		Term: rlService.CurrentSystem.CurrentTerm,
@@ -68,66 +101,55 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 	}
 
 	rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
-	
-	requests := []ReplicatedLogRequest{}
-
-	aliveSystems := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
-		return sys.Status == system.Alive 
-	})
-
-	totalAliveSystems := len(aliveSystems) + 1
-	minSuccessfulReplies := (totalAliveSystems / 2) + 1
 
 	for _, sys := range aliveSystems {
 		var request ReplicatedLogRequest
 		request.Host = sys.Host
 
-		prevLogIndex, prevLogTerm := rlService.determinePreviousIndexAndTerm(sys)
-		appendEntry := rlService.prepareAppendEntryRPC(prevLogIndex, prevLogTerm)
+		appendEntry := rlService.prepareAppendEntryRPC(lastLogIndex, lastLogTerm)
 
 		request.AppendEntry = appendEntry
 		requests = append(requests, request)
 	}
 
 	batchedRequests := rlService.truncatedRequests(requests)
-	successfulReplies := rlService.broadcastAppendEntryRPC(batchedRequests)
-	if successfulReplies >= minSuccessfulReplies { rlService.CommitLogsLeader() }
-}
+	successfulResps := int64(0)
+	
+	var repLogWG sync.WaitGroup
 
-/*
-	Sync Logs:
-		when a heartbeat is received and no logs have been applied to the replicated logs, sync up any systems 
-		where the replicated log is incomplete or incorrect. 
+	repLogWG.Add(1)
+	go func() {
+		defer repLogWG.Done()
 
-		1.) determine what systems are behind on logs 
-			--> status == Alive
-			--> the NextIndex of the system is behind the commit index of the leader
-				this means it is missing entries that have been safely commited to the state machine
+		for {
+			select {
+				case <- *rlRespChans.BroadcastClose:
+					if successfulResps >= int64(minSuccessfulResps) { 
+						log.Println("success resps meets minimum required for log commit")
+						rlService.CommitLogsLeader()
+					} else { log.Println("min successful responses not received.") }
+					return
+				case <- *rlRespChans.SuccessChan:
+					atomic.AddInt64(&successfulResps, 1)
+				case term :=<- *rlRespChans.HigherTermDiscovered:
+					log.Println("higher term discovered.")
+					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
+						CurrentTerm: &term,
+					})
 
-		2.) prepare the AppendEntryRPCs for each system
-*/
+					rlService.LeaderAcknowledgedSignal <- true
+					return
+			}
+		}
+	}()
 
-func (rlService *ReplicatedLogService[T]) SyncLogs() {
-	requests := []ReplicatedLogRequest{}
+	repLogWG.Add(1)
+	go func() {
+		defer repLogWG.Done()
+		rlService.broadcastAppendEntryRPC(batchedRequests, rlRespChans)
+	}()
 
-	systemsBehind := utils.Filter[*system.System[T]](rlService.SystemsList, func(sys *system.System[T]) bool {
-		if sys.Status == system.Alive && sys.NextIndex < rlService.CurrentSystem.CommitIndex { return true }
-		return false
-	})
-
-	for _, sys := range systemsBehind {
-		var request ReplicatedLogRequest
-		request.Host = sys.Host
-
-		prevLogIndex, prevLogTerm := rlService.determinePreviousIndexAndTerm(sys)
-		appendEntry := rlService.prepareAppendEntryRPC(prevLogIndex, prevLogTerm)
-
-		request.AppendEntry = appendEntry
-		requests = append(requests, request)
-	}
-
-	batchedRequests := rlService.truncatedRequests(requests)
-	rlService.broadcastAppendEntryRPC(batchedRequests)
+	repLogWG.Wait()
 }
 
 /*
@@ -147,11 +169,20 @@ func (rlService *ReplicatedLogService[T]) SyncLogs() {
 						--> signal that a higher term has been discovered and cancel all leftover requests
 */
 
-func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest) int {
-	var appendEntryWG sync.WaitGroup
+func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) {	
+	defer close(*rlRespChans.BroadcastClose)
+	
+	signalStopRPC := make(chan bool)
+	stopRPC := make(chan struct{})
 
-	successfulReplies := 0 
-	higherTermDiscovered := make(chan bool, 1)
+	defer close(signalStopRPC)
+	
+	go func() {
+		<- signalStopRPC
+		close(stopRPC)
+	}()
+
+	var appendEntryWG sync.WaitGroup
 
 	for _, reqs := range requestsPerHost {
 		appendEntryWG.Add(1)
@@ -160,7 +191,6 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 			defer appendEntryWG.Done()
 
 			receivingHost := req.Host
-
 			conn, connErr := rlService.ConnectionPool.GetConnection(receivingHost, rlService.Port)
 			if connErr != nil { log.Fatalf("Failed to connect to %s: %v", receivingHost + rlService.Port, connErr) }
 
@@ -172,45 +202,61 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 				return res, nil
 			}
 
-			maxRetries := 5
-			expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
-			expBackoff := utils.NewExponentialBackoffStrat[*replogrpc.AppendEntryResponse](expOpts)
-
-			res, err := expBackoff.PerformBackoff(appendEntryRPC)
-
-			sys := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
-				return sys.Host == receivingHost
-			})[0]
-
-			if err != nil { 
-				log.Printf("setting sytem %s to status dead", receivingHost)
-				system.SetStatus[T](sys, false)
-				return
-			}
-
-			if res.Success {
-				successfulReplies += 1
-				sys.NextIndex = res.LatestLogIndex
-			} else {
-				if res.Term > rlService.CurrentSystem.CurrentTerm { 
-					rlService.CurrentSystem.State = system.Follower
-					rlService.ConnectionPool.PutConnection(receivingHost, conn)
-					
-					higherTermDiscovered <- true
-					return
+			func() {
+				select {
+					case <- stopRPC:
+						return
+					default:			
+						maxRetries := 5
+						expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
+						expBackoff := utils.NewExponentialBackoffStrat[*replogrpc.AppendEntryResponse](expOpts)
+			
+						res, err := expBackoff.PerformBackoff(appendEntryRPC)
+			
+						sys := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
+							return sys.Host == receivingHost
+						})[0]
+			
+						if err != nil { 
+							log.Printf("setting sytem %s to status dead", receivingHost)
+							system.SetStatus[T](sys, false)
+							return
+						}
+			
+						sys.NextIndex = res.LatestLogIndex
+			
+						if res.Success {
+							*rlRespChans.SuccessChan <- 1
+						} else {
+							if res.Term > rlService.CurrentSystem.CurrentTerm { 
+								log.Println("higher term found on response for AppendEntryRPC", res.Term)
+								rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
+									CurrentTerm: &res.Term,
+								})
+							
+								*rlRespChans.HigherTermDiscovered <- res.Term
+								signalStopRPC <- true
+							}
+						}
 				}
-			}
+			}()
+			
 
 			rlService.ConnectionPool.PutConnection(receivingHost, conn)
 		}(reqs)
 	}
 
 	appendEntryWG.Wait()
+}
 
-	select {
-		case <- higherTermDiscovered:
-			return 0
-		default:
-			return successfulReplies
+func (rlService *ReplicatedLogService[T]) createRLRespChannels() RLResponseChannels {
+	broadcastClose := make(chan struct{})
+	successChan := make(chan int)
+	higherTermDiscovered := make(chan int64)
+
+	return RLResponseChannels{
+		BroadcastClose: &broadcastClose,
+		SuccessChan: &successChan,
+		HigherTermDiscovered: &higherTermDiscovered,
 	}
 }
