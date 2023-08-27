@@ -1,15 +1,18 @@
 package leaderelection
 
-import (
-	"log"
-	"net"
-	"time"
+// import "log"
+import "net"
+import "time"
 
-	"github.com/sirgallo/raft/pkg/lerpc"
-	"github.com/sirgallo/raft/pkg/system"
-	"github.com/sirgallo/raft/pkg/utils"
-	"google.golang.org/grpc"
-)
+import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/lerpc"
+import "github.com/sirgallo/raft/pkg/system"
+import "github.com/sirgallo/raft/pkg/utils"
+import "google.golang.org/grpc"
+
+
+const NAME = "Leader Election"
+
 
 //=========================================== Leader Election Service
 
@@ -27,6 +30,7 @@ func NewLeaderElectionService[T comparable](opts *LeaderElectionOpts[T]) *Leader
 		Timeout:             initTimeoutOnStartup(),
 		ResetTimeoutSignal:  make(chan bool),
 		HeartbeatOnElection: make(chan bool),
+		Log: *clog.NewCustomLog(NAME),
 	}
 
 	leService.CurrentSystem.State = system.Follower
@@ -43,13 +47,13 @@ func NewLeaderElectionService[T comparable](opts *LeaderElectionOpts[T]) *Leader
 
 func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *net.Listener) {
 	srv := grpc.NewServer()
-	log.Println("leader election gRPC server is listening on port:", leService.Port)
+	leService.Log.Info("leader election gRPC server is listening on port:", leService.Port)
 	lerpc.RegisterLeaderElectionServiceServer(srv, leService)
 
 	go func() {
 		err := srv.Serve(*listener)
 		if err != nil {
-			log.Fatalf("Failed to serve: %v", err)
+			leService.Log.Error("Failed to serve:", err)
 		}
 	}()
 

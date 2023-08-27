@@ -6,25 +6,28 @@ import "os"
 
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
+
+
+const NAME = "Main"
+var Log = clog.NewCustomLog(NAME)
 
 
 func main() {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
-	log.Println("hostname of system -->", hostname)
-
 	lePort := 54321
 	rlPort := 54322
 
 	leListener, err := net.Listen("tcp", utils.NormalizePort(lePort))
-	if err != nil { log.Fatalf("Failed to listen: %v", err) }
+	if err != nil { Log.Error("Failed to listen:", err) }
 
 	rlListener, err := net.Listen("tcp", utils.NormalizePort(rlPort))
-	if err != nil { log.Fatalf("Failed to listen: %v", err) }
+	if err != nil { Log.Error("Failed to listen:", err) }
 
 	currentSystem := &system.System[string]{
 		Host: hostname,

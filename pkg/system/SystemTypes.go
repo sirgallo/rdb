@@ -29,7 +29,7 @@ type System [T MachineCommands] struct {
 type StateTransitionOpts struct {
 	CurrentTerm *int64
 	VotedFor		*string
-}
+} 
 
 const (
 	Leader    SystemState = "leader"

@@ -2,6 +2,7 @@ package leaderelection
 
 import "time"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -30,6 +31,8 @@ type LeaderElectionService [T system.MachineCommands] struct {
 
 	ResetTimeoutSignal chan bool
 	HeartbeatOnElection chan bool
+
+	Log clog.CustomLog
 }
 
 type LEResponseChannels struct {

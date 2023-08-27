@@ -1,13 +1,16 @@
 package replog
 
-import "log"
 import "net"
 import "time"
 import "google.golang.org/grpc"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
+
+
+const NAME = "Leader Election"
 
 
 //=========================================== RepLog Service
@@ -27,6 +30,7 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
+		Log: *clog.NewCustomLog(NAME),
 	}
 }
 
@@ -38,13 +42,13 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *net.Listener) {
 	srv := grpc.NewServer()
-	log.Println("replog gRPC server is listening on port:", rlService.Port)
+	rlService.Log.Info("replog gRPC server is listening on port:", rlService.Port)
 
 	replogrpc.RegisterRepLogServiceServer(srv, rlService)
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil { log.Fatalf("Failed to serve: %v", err) }
+		if err != nil { rlService.Log.Error("Failed to serve:", err) }
 	}()
 
 	rlService.StartReplicatedLogTimeout()
@@ -71,14 +75,14 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 			rlService.resetTimer()
 		case <- rlService.HeartBeatTimer.C:
 			if rlService.CurrentSystem.State == system.Leader {
-				log.Println("sending heartbeats...")
+				rlService.Log.Info("sending heartbeats...")
 				rlService.Heartbeat()
 			}
 
 			rlService.resetTimer()
 		case <- rlService.ForceHeartbeatSignal:
 			if rlService.CurrentSystem.State == system.Leader {
-				log.Println("sending heartbeats after election...")
+				rlService.Log.Info("sending heartbeats after election...")
 				rlService.Heartbeat()
 			}
 

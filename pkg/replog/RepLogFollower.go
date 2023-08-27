@@ -1,15 +1,14 @@
 package replog
 
-import (
-	"context"
-	"log"
+import "context"
 
-	"github.com/sirgallo/raft/pkg/replogrpc"
-	"github.com/sirgallo/raft/pkg/system"
-	"github.com/sirgallo/raft/pkg/utils"
-)
+import "github.com/sirgallo/raft/pkg/replogrpc"
+import "github.com/sirgallo/raft/pkg/system"
+import "github.com/sirgallo/raft/pkg/utils"
+
 
 //=========================================== RepLog Follower
+
 
 /*
 	AppendEntryRPC:
@@ -81,7 +80,7 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 		appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) error {
 			cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
 			if decErr != nil {
-				log.Println("error on decode -->", decErr)
+				rlService.Log.Error("error on decode -->", decErr)
 				return decErr
 			}
 

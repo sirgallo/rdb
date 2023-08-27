@@ -1,16 +1,19 @@
 package system
 
-import "log"
-
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== System
 
 
+const NAME = "System"
+var Log = clog.NewCustomLog(NAME)
+
+
 func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) {
 	sys.State = Follower
-	log.Printf("service with hostname: %s transitioned to follower.\n", sys.Host)
+	Log.Warn("service with hostname:", sys.Host, "transitioned to follower.")
 
 	if opts.VotedFor != nil {
 		sys.VotedFor = *opts.VotedFor 
@@ -24,12 +27,12 @@ func (sys *System[T]) TransitionToCandidate() {
 	sys.CurrentTerm = sys.CurrentTerm + int64(1)
 	sys.VotedFor = sys.Host
 
-	log.Printf("service with hostname: %s transitioned to candidate, starting election.\n", sys.Host)
+	Log.Warn("service with hostname:", sys.Host, "transitioned to candidate, starting election.")
 }
 
 func (sys *System[T]) TransitionToLeader() {
 	sys.State = Leader
-	log.Printf("service with hostname: %s has been elected leader.\n", sys.Host)
+	Log.Warn("service with hostname:", sys.Host, "has been elected leader.")
 }
 
 func (sys *System[T]) ResetVotedFor() {

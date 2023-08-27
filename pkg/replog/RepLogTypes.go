@@ -2,6 +2,7 @@ package replog
 
 import "time"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -36,6 +37,8 @@ type ReplicatedLogService [T system.MachineCommands] struct {
 	LeaderAcknowledgedSignal chan bool
 	LogCommitChannel         chan []LogCommitChannelEntry[T]
 	ForceHeartbeatSignal		 chan bool
+
+	Log clog.CustomLog
 }
 
 type ReplicatedLogRequest struct {

@@ -1,7 +1,6 @@
 package replog
 
 import "context"
-import "log"
 import "sync"
 import "sync/atomic"
 
@@ -60,7 +59,7 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 					return
 				case <- *rlRespChans.SuccessChan:
 				case <- *rlRespChans.HigherTermDiscovered:
-					log.Println("higher term discovered.")
+					rlService.Log.Warn("higher term discovered.")
 					rlService.LeaderAcknowledgedSignal <- true
 					return
 			}
@@ -125,14 +124,13 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 			select {
 				case <- *rlRespChans.BroadcastClose:
 					if successfulResps >= int64(minSuccessfulResps) { 
-						log.Println("success resps meets minimum required for log commit")
 						rlService.CommitLogsLeader()
-					} else { log.Println("min successful responses not received.") }
+					} else { rlService.Log.Warn("min successful responses not received.") }
 					return
 				case <- *rlRespChans.SuccessChan:
 					atomic.AddInt64(&successfulResps, 1)
 				case term :=<- *rlRespChans.HigherTermDiscovered:
-					log.Println("higher term discovered.")
+					rlService.Log.Warn("higher term discovered.")
 					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
 						CurrentTerm: &term,
 					})
@@ -192,7 +190,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 
 			receivingHost := req.Host
 			conn, connErr := rlService.ConnectionPool.GetConnection(receivingHost, rlService.Port)
-			if connErr != nil { log.Fatalf("Failed to connect to %s: %v", receivingHost + rlService.Port, connErr) }
+			if connErr != nil { rlService.Log.Error("Failed to connect to", receivingHost + rlService.Port, ":", connErr) }
 
 			client := replogrpc.NewRepLogServiceClient(conn)
 
@@ -218,7 +216,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 						})[0]
 			
 						if err != nil { 
-							log.Printf("setting sytem %s to status dead", receivingHost)
+							rlService.Log.Error("setting sytem", receivingHost, "to status dead")
 							system.SetStatus[T](sys, false)
 							return
 						}
@@ -229,7 +227,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 							*rlRespChans.SuccessChan <- 1
 						} else {
 							if res.Term > rlService.CurrentSystem.CurrentTerm { 
-								log.Println("higher term found on response for AppendEntryRPC", res.Term)
+								rlService.Log.Warn("higher term found on response for AppendEntryRPC:", res.Term)
 								rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
 									CurrentTerm: &res.Term,
 								})
