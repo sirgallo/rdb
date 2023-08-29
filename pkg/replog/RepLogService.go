@@ -63,9 +63,8 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 /*
 	start the log timeouts:
 		separate go routines:
-			1.) replicated log timeouts
+			1.) replicated log
 				--> if a new log is signalled for append to the log, replicate the log to followers
-				--> if no logs are received before a heartbeat, sync all existing followers logs to leader (or attempt for batch size)
 			2.) heartbeat timeout
 				--> on a set interval, heartbeat all of the followers in the cluster if leader
 */

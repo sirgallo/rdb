@@ -14,7 +14,6 @@ import "github.com/sirgallo/raft/pkg/system"
 
 //=========================================== Raft Service
 
-// NOTE: Incomplete
 
 /*
 	initialize both the leader election module and the replicated log module under the same raft service

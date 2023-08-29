@@ -36,7 +36,6 @@ func NewConnectionPool(opts ConnectionPoolOpts) *ConnectionPool {
 				--> throw max connections error
 			otherwise for each connection in the array of connections, if the connection is not null and
 			the connection is ready for work, return the connection
-
 		3.) if the address was not loaded, create a new grpc connection and store the new connection at
 		the key associated with the address/host and return the new connection
 */
@@ -88,12 +87,18 @@ func (cp *ConnectionPool) PutConnection(addr string, connection *grpc.ClientConn
 	return false, nil
 }
 
+/*
+	Close Connections For Address:
+		1.) load connections for the particular host/address
+		2.) if the address was loaded from the thread safe map:
+			if the connection already exists in the map, close the connection
+		3.) remove the key from the map
+*/
+
 func (cp *ConnectionPool) CloseConnections(addr string) (bool, error) {
 	connections, loaded := cp.connections.Load(addr)
 	if loaded {
 		for _, conn := range connections.([]*grpc.ClientConn) {
-			conn.Close()
-
 			closeErr := conn.Close()
 			if closeErr != nil { return false, closeErr }
 		}

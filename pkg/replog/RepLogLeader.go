@@ -15,7 +15,9 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 /*
 	Heartbeat:
-		for all systems that have status Alive, send an empty AppendEntryRPC
+		for all systems in the System Map, send an empty AppendEntryRPC
+
+		If a higher term is discovered in a response, revert the Leader back to Follower State
 */
 
 func (rlService *ReplicatedLogService[T]) Heartbeat() {
@@ -67,14 +69,15 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 
 /*
 	Replicate Logs:
-		1.) append the new log to the replicated log on the leader,
+		1.) append the new log to the replicated log on the Leader,
 			--> index is just the index of the last log + 1
 			--> term is the current term on the leader
-		2.) determine what systems are alive and prepare AppendEntryRPCs for each
+		2.) prepare AppendEntryRPCs for each system in the Systems Map
 			--> determine the next index of the system that the rpc is prepared for from the system object at NextIndex
 		3.) on responses
-			--> if the leader receives a success signal from the majority of the nodes in the cluster, 
+			--> if the Leader receives a success signal from the majority of the nodes in the cluster, 
 				commit the logs to the state machine
+			--> if the Leader gets a response with a higher term than its own, revert to Follower state
 */
 
 func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {	
@@ -112,9 +115,9 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 			select {
 				case <- *rlRespChans.BroadcastClose:
 					if successfulResps >= int64(minSuccessfulResps) { 
-						rlService.Log.Warn("min successful responses received:", successfulResps)
+						rlService.Log.Warn("at least minimum successful responses received:", successfulResps)
 						rlService.CommitLogsLeader()
-					} else { rlService.Log.Warn("min successful responses not received.") }
+					} else { rlService.Log.Warn("minimum successful responses not received.") }
 					return
 				case <- *rlRespChans.SuccessChan:
 					atomic.AddInt64(&successfulResps, 1)
@@ -150,7 +153,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 			1.) send AppendEntryRPCs in parallel to each follower in the cluster
 			2.) in each go routine handling each request, perform exponential backoff on failed requests until max retries
 			3.) 
-				if err: set the system status to dead and return
+				if err: remove system from system map and close all connections -- it has failed
 				if res:
 					if success: 
 						--> update total successful replies and update the next index of the system to the last log index of the reply

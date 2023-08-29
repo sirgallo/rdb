@@ -15,11 +15,12 @@ import "github.com/sirgallo/raft/pkg/utils"
 		grpc implementation
 
 		when an AppendEntryRPC is made to the appendEntry server
-			1.) if the host of the incoming request has been Dead, set the status as Alive
+			1.) if the host of the incoming request is not in the systems map, store it
+			2.) reset the election timeout regardless of success or failure response
 			2.) if the request has a term lower than the current term of the system
 				--> return a failure response with the term of the system
-			3.) if the term of the replicated log on the system is not the term of the request
-				--> return a failure response
+			3.) if the term of the replicated log on the system is not the term of the request or is not present
+				--> return a failure response, with the term and the index of the request - 1 to update NextIndex
 			4.) acknowledge that the request is legitimate and send signal to reset the leader election timeout
 			5.) for all of the entries of the incoming request
 				--> if the term of the replicated log associated with the index of the incoming entry is not the same
@@ -28,8 +29,6 @@ import "github.com/sirgallo/raft/pkg/utils"
 			6.) if the commit index of the incoming request is higher than on the system, commit up the commit index
 				for the state machine on the system
 			7.) return a success response with the index of the latest log applied to the replicated log
-
-	The implementation is separated out into smaller functions (all Handle* functions) for testability
 */
 
 func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
@@ -40,9 +39,9 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	rlService.Systems.LoadOrStore(sys.Host, sys)
 
-	rlService.LeaderAcknowledgedSignal <- true	// if term is higher but there is a log mismatch
-
+	rlService.LeaderAcknowledgedSignal <- true
 	success := true
+	
 	handleReqTerm := func() bool { 
 		return req.Term >= rlService.CurrentSystem.CurrentTerm
 	}
