@@ -130,7 +130,7 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 
 					requestVoteRPC := func() (*lerpc.RequestVoteResponse, error) {
 						ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Millisecond)
-					  defer cancel()
+						defer cancel()
 
 						res, err := client.RequestVoteRPC(ctx, request)
 						if err != nil { return utils.GetZero[*lerpc.RequestVoteResponse](), err }
