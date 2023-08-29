@@ -2,13 +2,14 @@ package clog
 
 import "fmt"
 import "strings"
+import "time"
 
 import "github.com/sirgallo/raft/pkg/utils"
 
 
 func NewCustomLog(name string) *CustomLog {
 	return &CustomLog{
-			Name: name,
+		Name: name,
 	}
 }
 
@@ -29,6 +30,9 @@ func (cLog *CustomLog) Warn(msg ...interface{}) {
 }
 
 func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
+	currTime := time.Now()
+	formattedTime := currTime.Format("2006-01-02 15:04:05.000")
+
 	encodedMsg := func () string {
 		encodeTransform := func(chunk interface{}) string {
 			encoded, _ := utils.EncodeStructToString[interface{}](chunk)
@@ -40,16 +44,16 @@ func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 	}()
 
 	color := func () LogColor {
-			if level == Debug { 
-					return DebugColor 
-			} else if level == Error { 
-					return ErrorColor
-			} else if level == Info {
-					return InfoColor
-			} else{
-					return WarnColor
-			}
+		if level == Debug { 
+			return DebugColor 
+		} else if level == Error { 
+			return ErrorColor
+		} else if level == Info {
+			return InfoColor
+		} else{
+			return WarnColor
+		}
 	}()
 
-	fmt.Printf("%s[%s] %s: %s\n", color, cLog.Name, level, encodedMsg)
+	fmt.Printf("%s[%s](%s) %s: %s\n", color, cLog.Name, formattedTime, Bold + level, Reset + encodedMsg)
 }

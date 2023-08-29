@@ -1,19 +1,27 @@
 package leaderelection
 
+import "sync"
 import "time"
 
-import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
 
 
+type TimeoutRange struct {
+	Min int
+	Max int
+}
+
 type LeaderElectionOpts [T system.MachineCommands] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
+	TimeoutRange TimeoutRange
 
 	CurrentSystem *system.System[T]
 	SystemsList   []*system.System[T]
+	Systems 			*sync.Map
 }
 
 type LeaderElectionService [T system.MachineCommands] struct {
@@ -23,7 +31,7 @@ type LeaderElectionService [T system.MachineCommands] struct {
 
 	// Persistent State
 	CurrentSystem *system.System[T]
-	SystemsList   []*system.System[T]
+	Systems 			*sync.Map
 
 	// Module Level State
 	Timeout  time.Duration

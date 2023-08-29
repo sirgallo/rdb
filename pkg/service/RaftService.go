@@ -2,17 +2,17 @@ package service
 
 import "log"
 import "net"
+import "os"
+import "sync"
 
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/system"
-import "github.com/sirgallo/raft/pkg/statemachine"
-import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== Raft Service
-
 
 // NOTE: Incomplete
 
@@ -23,43 +23,62 @@ import "github.com/sirgallo/raft/pkg/utils"
 	initialize the state machine operations/state machine dependency
 */
 
-func NewRaftService [T any, U string, V comparable](opts RaftServiceOpts[T, U, V]) *RaftService[T, U, V] {	
-	leConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
-	rlConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
-	systemFilter := func(sys *system.System[statemachine.StateMachineOperation[U, V]]) bool { 
-		return sys.Host != opts.CurrentSystem.Host 
+const NAME = "Raft"
+var Log = clog.NewCustomLog(NAME)
+
+func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {	
+	hostname, hostErr := os.Hostname()
+	if hostErr != nil { log.Fatal("unable to get hostname") }
+
+	currentSystem := &system.System[T]{
+		Host: hostname,
+		CurrentTerm: 0,
+		CommitIndex: 0,
+		LastApplied: 0,
+		Replog: []*system.LogEntry[T]{},
+	}
+	
+	cpOpts := connpool.ConnectionPoolOpts{
+		MaxConn: 10,
 	}
 
-	leOpts := &leaderelection.LeaderElectionOpts[statemachine.StateMachineOperation[U, V]]{
-		Port:           opts.Ports.LeaderElection,
-		ConnectionPool: leConnPool,
-		CurrentSystem:  opts.CurrentSystem,
-		SystemsList:    utils.Filter[*system.System[statemachine.StateMachineOperation[U, V]]](opts.SystemsList, systemFilter),
-	}
-
-	rlOpts := &replog.ReplicatedLogOpts[statemachine.StateMachineOperation[U, V]]{
-		Port:           opts.Ports.ReplicatedLog,
-		ConnectionPool: rlConnPool,
-		CurrentSystem:  opts.CurrentSystem,
-		SystemsList:    utils.Filter[*system.System[statemachine.StateMachineOperation[U, V]]](opts.SystemsList, systemFilter),
-	}
-
-	leService := leaderelection.NewLeaderElectionService[statemachine.StateMachineOperation[U, V]](leOpts)
-	rlService := replog.NewReplicatedLogService[statemachine.StateMachineOperation[U, V]](rlOpts)
-
-	smOpMap := opts.StateMachineClient.NewStateMachineOperationMap(opts.StateMachineClientConstructor)
-
-	return &RaftService[T, U, V]{
+	raft := &RaftService[T]{
 		Protocol: opts.Protocol,
-		Ports: opts.Ports,
-		CurrentSystem: opts.CurrentSystem,
-		SystemsList: opts.SystemsList,
-
-		LeaderElection: leService,
-		ReplicatedLog: rlService,
-		StateMachineOperations: *smOpMap,
+		Systems: &sync.Map{},
 	}
+
+	for _, sys := range opts.SystemsList {
+		raft.Systems.Store(sys.Host, sys)
+	}
+
+	rlConnPool := connpool.NewConnectionPool(cpOpts)
+	leConnPool := connpool.NewConnectionPool(cpOpts)
+
+	lePort := 54321
+	rlPort := 54322
+
+	rlOpts := &replog.ReplicatedLogOpts[T]{
+		Port:           rlPort,
+		ConnectionPool: rlConnPool,
+		CurrentSystem:  currentSystem,
+		Systems: raft.Systems,
+	}
+
+	leOpts := &leaderelection.LeaderElectionOpts[T]{
+		Port:           lePort,
+		ConnectionPool: leConnPool,
+		CurrentSystem:  currentSystem,
+		Systems: raft.Systems,
+	}
+
+	rlService := replog.NewReplicatedLogService[T](rlOpts)
+	leService := leaderelection.NewLeaderElectionService[T](leOpts)
+
+	raft.LeaderElection = leService
+	raft.ReplicatedLog = rlService
+
+	return raft
 }
 
 /*
@@ -68,12 +87,12 @@ func NewRaftService [T any, U string, V comparable](opts RaftServiceOpts[T, U, V
 		initialize the state machine dependency and link to the replicated log module for log commits
 */
 
-func (raft *RaftService[T, U, V]) StartRaftService() {
-	leListener, err := net.Listen("tcp", utils.NormalizePort(raft.Ports.LeaderElection))
-	if err != nil { log.Fatalf("Failed to listen: %v", err) }
+func (raft *RaftService[T]) StartRaftService() {
+	leListener, err := net.Listen("tcp", raft.LeaderElection.Port)
+	if err != nil { Log.Error("Failed to listen: %v", err) }
 
-	rlListener, err := net.Listen("tcp", utils.NormalizePort(raft.Ports.ReplicatedLog))
-	if err != nil { log.Fatalf("Failed to listen: %v", err) }
+	rlListener, err := net.Listen("tcp", raft.ReplicatedLog.Port)
+	if err != nil { Log.Error("Failed to listen: %v", err) }
 
 	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)
 	go raft.LeaderElection.StartLeaderElectionService(&leListener)
@@ -87,26 +106,10 @@ func (raft *RaftService[T, U, V]) StartRaftService() {
 
 	go func () {
 		for {
-			cmd :=<- raft.ClientCommandChannel
-			raft.ReplicatedLog.AppendLogSignal <- cmd
+			<- raft.LeaderElection.HeartbeatOnElection
+			raft.ReplicatedLog.ForceHeartbeatSignal <- true
 		}
 	}()
-
-	go func () {
-		for {
-			logs :=<- raft.ReplicatedLog.LogCommitChannel
-			
-			for idx, log := range logs {
-				_, opErr := raft.StateMachineOperations.Ops[log.LogEntry.Command.Action](log.LogEntry.Command)
-				if opErr != nil { break }
-				
-				log.Complete = true
-				logs[idx] = log
-			}
-			
-			raft.ReplicatedLog.LogCommitChannel <- logs
-		}
-	}()
-
+	
 	select{}
 }

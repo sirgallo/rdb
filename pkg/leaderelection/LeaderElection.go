@@ -3,6 +3,7 @@ package leaderelection
 import "context"
 import "sync"
 import "sync/atomic"
+import "time"
 
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -45,6 +46,7 @@ func (leService *LeaderElectionService[T]) Election() {
 					} else {
 						leService.Log.Warn("min successful votes not received...")
 						leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{})
+						leService.resetTimer()
 					}
 
 					return
@@ -52,10 +54,11 @@ func (leService *LeaderElectionService[T]) Election() {
 					atomic.AddInt64(&votesGranted, 1)
 				case term :=<- *leRespChans.HigherTermDiscovered:
 					leService.Log.Warn("higher term discovered.")
-					leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ 
-						CurrentTerm: &term, 
+					leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
+						CurrentTerm: &term,
 					})
 
+					leService.resetTimer()
 					return
 			}
 		}
@@ -68,6 +71,9 @@ func (leService *LeaderElectionService[T]) Election() {
 	}()
 
 	electionWG.Wait()
+
+	close(*leRespChans.VotesChan)
+	close(*leRespChans.HigherTermDiscovered)
 }
 
 /*
@@ -86,16 +92,9 @@ func (leService *LeaderElectionService[T]) Election() {
 
 func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system.System[T], leRespChans LEResponseChannels) {		
 	defer close(*leRespChans.BroadcastClose)
-	
-	signalStopRPC := make(chan bool)
-	stopRPC := make(chan struct{})
-	
-	defer close(signalStopRPC)
 
-	go func() {
-		<- signalStopRPC
-		close(stopRPC)
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
 	request := &lerpc.RequestVote{
@@ -114,42 +113,50 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 			defer requestVoteWG.Done()
 			
 			conn, connErr := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
-			if connErr != nil { leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr) }
-
-			client := lerpc.NewLeaderElectionServiceClient(conn)
-
-			requestVoteRPC := func() (*lerpc.RequestVoteResponse, error) {
-				res, err := client.RequestVoteRPC(context.Background(), request)
-				if err != nil { return utils.GetZero[*lerpc.RequestVoteResponse](), err }
-				return res, nil
+			if connErr != nil { 
+				leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr) 
+				return
 			}
-			
-			func() {
-				select {
-					case <- stopRPC:
+
+			select {
+				case <- ctx.Done():
+					leService.ConnectionPool.PutConnection(sys.Host, conn)
+					return
+				default:
+					conn, connErr := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
+					if connErr != nil { leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr) }
+
+					client := lerpc.NewLeaderElectionServiceClient(conn)
+
+					requestVoteRPC := func() (*lerpc.RequestVoteResponse, error) {
+						ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Millisecond)
+					  defer cancel()
+
+						res, err := client.RequestVoteRPC(ctx, request)
+						if err != nil { return utils.GetZero[*lerpc.RequestVoteResponse](), err }
+						return res, nil
+					}
+
+					maxRetries := 5
+					expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
+					expBackoff := utils.NewExponentialBackoffStrat[*lerpc.RequestVoteResponse](expOpts)
+
+					res, err := expBackoff.PerformBackoff(requestVoteRPC)
+					if err != nil { 
+						leService.Log.Warn("system", sys.Host, "unreachable")
+						leService.Systems.Delete(sys.Host)
+						leService.ConnectionPool.CloseConnections(sys.Host)
 						return 
-					default:
-						maxRetries := 5
-						expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
-						expBackoff := utils.NewExponentialBackoffStrat[*lerpc.RequestVoteResponse](expOpts)
+					}
 
-						res, err := expBackoff.PerformBackoff(requestVoteRPC)
-						if err != nil { 
-							leService.Log.Warn("setting sytem", sys.Host, "to status dead")
-							system.SetStatus[T](sys, false)
-							return 
-						}
-
-						if res.VoteGranted { *leRespChans.VotesChan <- 1 }
-						
-						if res.Term > leService.CurrentSystem.CurrentTerm {
-							*leRespChans.HigherTermDiscovered <- res.Term
-							signalStopRPC <- true
-						}
-				}
-			}()
-		
-			leService.ConnectionPool.PutConnection(sys.Host, conn)
+					if res.VoteGranted { *leRespChans.VotesChan <- 1 }
+					if res.Term > leService.CurrentSystem.CurrentTerm {
+						*leRespChans.HigherTermDiscovered <- res.Term
+						cancel()
+					}
+				
+					leService.ConnectionPool.PutConnection(sys.Host, conn)
+			}
 		}(sys)
 	}
 
@@ -170,13 +177,18 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 */
 
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
-	sys := utils.Filter[*system.System[T]](leService.SystemsList, func (sys *system.System[T]) bool { return sys.Host == req.CandidateId })[0]
-	system.SetStatus[T](sys, true)
+	sys := &system.System[T]{
+		Host: req.CandidateId,
+		NextIndex: -1,
+	}
+
+	leService.Systems.LoadOrStore(sys.Host, sys)
 
 	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
 
 	leService.Log.Debug("req current term:", req.CurrentTerm, "system current term:", leService.CurrentSystem.CurrentTerm)
 	leService.Log.Debug("latest log index:", lastLogIndex, "rep log length:", len(leService.CurrentSystem.Replog))
+	leService.Log.Debug("req log index:", req.LastLogIndex)
 
 	if leService.CurrentSystem.VotedFor == utils.GetZero[string]() || leService.CurrentSystem.VotedFor == req.CandidateId {
 		if req.LastLogIndex >= lastLogIndex && req.LastLogTerm >= lastLogTerm {
@@ -185,7 +197,7 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 				VotedFor: &req.CandidateId,
 			})
 
-			leService.ResetTimeoutSignal <- true
+			leService.resetTimer()
 
 			voteGranted := &lerpc.RequestVoteResponse{
 				Term: leService.CurrentSystem.CurrentTerm,
@@ -195,6 +207,15 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 			leService.Log.Info("vote granted to:", req.CandidateId)
 			return voteGranted, nil
 		}
+	}
+
+	if req.CurrentTerm > leService.CurrentSystem.CurrentTerm {
+		leService.Log.Warn("RequestVoteRPC higher term")
+		leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
+			CurrentTerm: &req.CurrentTerm,
+		})
+
+		leService.resetTimer()
 	}
 
 	voteRejected := &lerpc.RequestVoteResponse{

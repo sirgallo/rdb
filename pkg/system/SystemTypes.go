@@ -1,5 +1,7 @@
 package system
 
+import "sync"
+
 
 type SystemState string
 type SystemStatus int
@@ -24,6 +26,8 @@ type System [T MachineCommands] struct {
 	Replog      []*LogEntry[T]
 
 	NextIndex  int64 // next index to send to a server
+
+	SystemMutex sync.Mutex
 }
 
 type StateTransitionOpts struct {

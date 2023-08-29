@@ -15,6 +15,9 @@ const (
     Warn   LogLevel = "Warn"
 )
 
+const Reset = "\033[0m"
+const Bold = "\033[1m"
+
 // ANSI escape codes for text colors
 const (
     DebugColor  LogColor = "\033[34m"

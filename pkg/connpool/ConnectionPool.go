@@ -52,7 +52,10 @@ func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientC
 	}
 
 	newConn, connErr := grpc.Dial(addr + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if connErr != nil { return nil, connErr }
+	if connErr != nil { 
+		cp.connections.Delete(addr)
+		return nil, connErr 
+	}
 
 	emptyConns, loaded := cp.connections.LoadOrStore(addr, []*grpc.ClientConn{newConn})
 	if loaded {
@@ -83,4 +86,19 @@ func (cp *ConnectionPool) PutConnection(addr string, connection *grpc.ClientConn
 	if closeErr != nil { return false, closeErr }
 	
 	return false, nil
+}
+
+func (cp *ConnectionPool) CloseConnections(addr string) (bool, error) {
+	connections, loaded := cp.connections.Load(addr)
+	if loaded {
+		for _, conn := range connections.([]*grpc.ClientConn) {
+			conn.Close()
+
+			closeErr := conn.Close()
+			if closeErr != nil { return false, closeErr }
+		}
+	}
+
+	cp.connections.Delete(addr)
+	return true, nil
 }

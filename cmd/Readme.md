@@ -8,13 +8,5 @@ To run one of the applications (from `root` of project):
 docker-compose -f ./cmd/<app-to-run>/docker-compose.yml up --build
 ```
 
-## Completed
-
-  - test leader election in [leaderelection](./leaderelection)
-  - test heartbeat in [heartbeat](./heartbeat)
-  - test replicated log in [replog](./replog)
-
 apps to run:
-  - leaderelection
-  - heartbeat
-  - replog
+  - raft

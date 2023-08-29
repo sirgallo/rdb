@@ -1,8 +1,9 @@
 package replog
 
+import "sync"
 import "time"
 
-import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -14,6 +15,7 @@ type ReplicatedLogOpts [T system.MachineCommands] struct {
 
 	CurrentSystem  *system.System[T]
 	SystemsList    []*system.System[T]
+	Systems 			 *sync.Map
 }
 
 type LogCommitChannelEntry [T system.MachineCommands] struct {
@@ -28,7 +30,7 @@ type ReplicatedLogService [T system.MachineCommands] struct {
 
 	// Persistent State
 	CurrentSystem *system.System[T]
-	SystemsList   []*system.System[T]
+	Systems 			*sync.Map
 
 	HeartBeatTimer *time.Timer
 

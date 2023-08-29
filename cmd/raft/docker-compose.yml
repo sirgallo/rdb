@@ -1,0 +1,65 @@
+version: "3"
+services:
+  raftsrv1:
+    image: raftsrv1_img
+    container_name: raftsrv1_cont
+    hostname: raftsrv1
+    build:
+      context: ../../
+      dockerfile: ./cmd/raft/Dockerfile
+    networks:
+      raft_api_network:
+    ports:
+      - 54321
+      - 54322
+  raftsrv2:
+    image: raftsrv2_img
+    container_name: raftsrv2_cont
+    hostname: raftsrv2
+    build:
+      context: ../../
+      dockerfile: ./cmd/raft/Dockerfile
+    networks:
+      raft_api_network:
+    ports:
+      - 54321
+      - 54322
+  raftsrv3:
+    image: raftsrv3_img
+    container_name: raftsrv3_cont
+    hostname: raftsrv3
+    build:
+      context: ../../
+      dockerfile: ./cmd/raft/Dockerfile
+    networks:
+      raft_api_network:
+    ports:
+      - 54321
+      - 54322
+  raftsrv4:
+    image: raftsrv4_img
+    container_name: raftsrv4_cont
+    hostname: raftsrv4
+    build:
+      context: ../../
+      dockerfile: ./cmd/raft/Dockerfile
+    networks:
+      raft_api_network:
+    ports:
+      - 54321
+      - 54322
+  raftsrv5:
+    image: raftsrv5_img
+    container_name: raftsrv5_cont
+    hostname: raftsrv5
+    build:
+      context: ../../
+      dockerfile: ./cmd/raft/Dockerfile
+    networks:
+      raft_api_network:
+    ports:
+      - 54321
+      - 54322
+networks:
+  raft_api_network:
+    driver: bridge

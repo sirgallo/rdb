@@ -1,10 +1,9 @@
 package leaderelection
 
-// import "log"
 import "net"
 import "time"
 
-import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
@@ -26,15 +25,14 @@ func NewLeaderElectionService[T comparable](opts *LeaderElectionOpts[T]) *Leader
 		Port:                utils.NormalizePort(opts.Port),
 		ConnectionPool:      opts.ConnectionPool,
 		CurrentSystem:       opts.CurrentSystem,
-		SystemsList:         opts.SystemsList,
+		Systems:						 opts.Systems,
 		Timeout:             initTimeoutOnStartup(),
 		ResetTimeoutSignal:  make(chan bool),
 		HeartbeatOnElection: make(chan bool),
-		Log: *clog.NewCustomLog(NAME),
+		Log: 								 *clog.NewCustomLog(NAME),
 	}
 
-	leService.CurrentSystem.State = system.Follower
-	leService.CurrentSystem.ResetVotedFor()
+	leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{})
 
 	return leService
 }
@@ -52,9 +50,7 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil {
-			leService.Log.Error("Failed to serve:", err)
-		}
+		if err != nil { leService.Log.Error("Failed to serve:", err) }
 	}()
 
 	leService.StartElectionTimeout()
@@ -69,16 +65,24 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 
 func (leService *LeaderElectionService[T]) StartElectionTimeout() {
 	leService.ElectionTimer = time.NewTimer(leService.Timeout)
+	timeoutChannel := make(chan bool)
 
-	for {
-		select {
-		case <-leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
-			leService.resetTimer()
-		case <-leService.ElectionTimer.C:
-			if leService.CurrentSystem.State == system.Follower {
-				leService.Election()
-			}
+	go func() {
+		for {
+			<- leService.ElectionTimer.C
+			timeoutChannel <- true
 			leService.resetTimer()
 		}
-	}
+	}()
+
+	go func() {
+		for {
+			select {
+				case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
+					leService.resetTimer()
+				case <- timeoutChannel:
+					if leService.CurrentSystem.State == system.Follower { leService.Election() }
+				}
+		}
+	}()
 }

@@ -23,49 +23,11 @@ func (rlService *ReplicatedLogService[T]) determineBatchSize() int{
 }
 
 /*
-	to minimize system and network overhead, requests take only a specified number of logs. 
-*/
-
-func (rlService *ReplicatedLogService[T]) truncatedRequests(requests []ReplicatedLogRequest) []ReplicatedLogRequest {
-	transformLogRequest := func(req ReplicatedLogRequest) ReplicatedLogRequest {
-		// logBatches, _ := utils.Chunk[*replogrpc.LogEntry](req.AppendEntry.Entries, rlService.determineBatchSize())
-		// earliestBatch := logBatches[0]
-		batchSize := rlService.determineBatchSize()
-		
-		var earliestBatch []*replogrpc.LogEntry
-		
-		if len(req.AppendEntry.Entries) <= batchSize {
-			earliestBatch = req.AppendEntry.Entries
-		} else { earliestBatch = req.AppendEntry.Entries[:batchSize - 1] }
-
-		transformLog := func(entries []*replogrpc.LogEntry) ReplicatedLogRequest {
-			appendEntry := replogrpc.AppendEntry{
-				Term: req.AppendEntry.Term,
-				LeaderId: req.AppendEntry.LeaderId,
-				PrevLogIndex: req.AppendEntry.PrevLogIndex,
-				PrevLogTerm: req.AppendEntry.PrevLogTerm,
-				Entries: entries,
-			}
-
-			return ReplicatedLogRequest{
-				Host: req.Host,
-				AppendEntry: &appendEntry,
-			}
-		}
-
-		return transformLog(earliestBatch)
-	}
-
-	return utils.Map[ReplicatedLogRequest, ReplicatedLogRequest](requests, transformLogRequest)
-}
-
-/*
 	existance check on the log for a specific index, ensure that it can exist within range
 */
 
 func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
-	if index >= 0 && index < int64(len(rlService.CurrentSystem.Replog)) { return true }
-	return false
+	return (index >= 0 && index < int64(len(rlService.CurrentSystem.Replog)))
 }
 
 /*
@@ -75,7 +37,7 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 		--> create the rpc request from the Log Entry
 */
 
-func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex, prevLogTerm int64) *replogrpc.AppendEntry {
+func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex int64, isHeartbeat bool) *replogrpc.AppendEntry {
 	sysHostPtr := &rlService.CurrentSystem.Host
 
 	transformLogEntry := func(logEntry *system.LogEntry[T]) *replogrpc.LogEntry {
@@ -89,19 +51,39 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex, pr
 		}
 	}
 
-	var entries []*replogrpc.LogEntry
 	var previousLogIndex, previousLogTerm int64
 
 	if prevLogIndex == -1 {
-		entries = nil
 		previousLogIndex = utils.GetZero[int64]() 
 		previousLogTerm = utils.GetZero[int64]()
 	} else {
-		entriesToSend := rlService.CurrentSystem.Replog[prevLogIndex:]
-		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
-
 		previousLogIndex = prevLogIndex
-		previousLogTerm = prevLogTerm
+		previousLogTerm = rlService.CurrentSystem.Replog[prevLogIndex].Term
+	}
+
+	var entries []*replogrpc.LogEntry
+
+	if isHeartbeat {
+		entries = nil
+	} else {
+		entriesToSend := func () []*system.LogEntry[T] {
+			if prevLogIndex == -1 { return rlService.CurrentSystem.Replog }
+			return rlService.CurrentSystem.Replog[previousLogIndex:]
+		}()
+
+		batchedEntries := func() []*system.LogEntry[T] {
+			batchSize := rlService.determineBatchSize()
+			
+			var earliestBatch []*system.LogEntry[T]
+			
+			if len(entriesToSend) <= batchSize {
+				earliestBatch = entriesToSend
+			} else { earliestBatch = entriesToSend[:batchSize - 1] }
+			
+			return earliestBatch
+		}()
+
+		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](batchedEntries, transformLogEntry)
 	}
 
 	appendEntry := &replogrpc.AppendEntry{
@@ -117,8 +99,11 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex, pr
 }
 
 func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
-	aliveSystems := utils.Filter[*system.System[T]](rlService.SystemsList, func (sys *system.System[T]) bool { 
-		return sys.Status == system.Alive 
+	var aliveSystems []*system.System[T]
+	
+	rlService.Systems.Range(func(key, value interface{}) bool {
+		aliveSystems = append(aliveSystems, value.(*system.System[T]))
+		return true
 	})
 
 	totAliveSystems := len(aliveSystems) + 1

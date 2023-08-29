@@ -33,47 +33,51 @@ import "github.com/sirgallo/raft/pkg/utils"
 */
 
 func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
-	sys := utils.Filter[*system.System[T]](rlService.SystemsList, func(sys *system.System[T]) bool { return sys.Host == req.LeaderId })[0]
-	system.SetStatus[T](sys, true)
+	sys := &system.System[T]{
+		Host: req.LeaderId,
+		NextIndex: -1,
+	}
+
+	rlService.Systems.LoadOrStore(sys.Host, sys)
+
+	rlService.LeaderAcknowledgedSignal <- true	// if term is higher but there is a log mismatch
 
 	success := true
-	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-
-	success = rlService.HandleReqWithLowerTerm(req, lastLogIndex)
-	if !success {
-		return rlService.generateResponse(lastLogIndex, success), nil
+	handleReqTerm := func() bool { 
+		return req.Term >= rlService.CurrentSystem.CurrentTerm
+	}
+	handleReqValidTermAtReqIndex := func() bool {
+		if len(rlService.CurrentSystem.Replog) == 0 || req.Entries == nil { return true }	// special case for when a system has empty replicated log or hearbeats where we don't check
+		return rlService.checkIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term == req.PrevLogTerm
 	}
 
-	success = rlService.HandleReqMismatchedTerm(req, lastLogIndex)
-	if !success {
-		return rlService.generateResponse(lastLogIndex, success), nil
+	success = handleReqTerm()
+	if ! success { 
+		rlService.Log.Debug("request term lower than current term, returning failed response")
+		return rlService.generateResponse(req.PrevLogIndex - 1, success), nil 
 	}
 
-	rlService.LeaderAcknowledgedSignal <- true
+	success = handleReqValidTermAtReqIndex()
+	if ! success { 
+		rlService.Log.Debug("log at request previous index has mismatched term or does not exist, returning failed response")
+		return rlService.generateResponse(req.PrevLogIndex - 1, success), nil 
+	}
 
 	success, repLogErr := rlService.HandleReplicateLogs(req)
-	lastLogIndex, _ = system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-	if repLogErr != nil {
-		return rlService.generateResponse(lastLogIndex, success), repLogErr
+	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	if repLogErr != nil { 
+		rlService.Log.Warn("replog err:", repLogErr)
+		return rlService.generateResponse(lastLogIndex, success), repLogErr 
 	}
 
+	rlService.Log.Debug("leader acknowledged and returning successful response:", rlService.generateResponse(lastLogIndex, success))
 	return rlService.generateResponse(lastLogIndex, success), nil
-}
-
-func (rlService *ReplicatedLogService[T]) HandleReqWithLowerTerm(req *replogrpc.AppendEntry, lastLogIndex int64) bool {
-	return !(req.Term < rlService.CurrentSystem.CurrentTerm)
-}
-
-func (rlService *ReplicatedLogService[T]) HandleReqMismatchedTerm(req *replogrpc.AppendEntry, lastLogIndex int64) bool {
-	return !rlService.checkIndex(req.PrevLogIndex) || rlService.CurrentSystem.Replog[req.PrevLogIndex].Term == req.PrevLogTerm
 }
 
 func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.AppendEntry) (bool, error) {
 	if req.Entries != nil {
 		min := func(idx1, idx2 int64) int64 {
-			if idx1 < idx2 {
-				return idx1
-			}
+			if idx1 < idx2 { return idx1 }
 			return idx2
 		}
 
@@ -99,15 +103,11 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 				if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term {
 					rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index]
 					decErr := appendLogToReplicatedLog(entry)
-					if decErr != nil {
-						return false, decErr
-					}
+					if decErr != nil { return false, decErr }
 				}
 			} else {
 				decErr := appendLogToReplicatedLog(entry)
-				if decErr != nil {
-					return false, decErr
-				}
+				if decErr != nil { return false, decErr }
 			}
 		}
 
@@ -116,9 +116,7 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 				index := int64(len(rlService.CurrentSystem.Replog) - 1)
 				rlService.CurrentSystem.CommitIndex = min(req.LeaderCommitIndex, index)
 				commitErr := rlService.CommitLogsFollower()
-				if commitErr != nil {
-					return false, commitErr
-				}
+				if commitErr != nil { return false, commitErr }
 			}
 		}
 	}

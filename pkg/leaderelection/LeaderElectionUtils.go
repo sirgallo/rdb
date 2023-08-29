@@ -4,7 +4,6 @@ import "math/rand"
 import "time"
 
 import "github.com/sirgallo/raft/pkg/system"
-import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== Leader Election Utils
@@ -28,8 +27,11 @@ func initTimeoutOnStartup() time.Duration {
 }
 
 func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*system.System[T], int64) {
-	aliveSystems := utils.Filter[*system.System[T]](leService.SystemsList, func (sys *system.System[T]) bool { 
-		return sys.Status == system.Alive 
+	var aliveSystems []*system.System[T]
+	
+	leService.Systems.Range(func(key, value interface{}) bool {
+		aliveSystems = append(aliveSystems, value.(*system.System[T]))
+		return true
 	})
 
 	totAliveSystems := len(aliveSystems) + 1

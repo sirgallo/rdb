@@ -4,13 +4,13 @@ import "net"
 import "time"
 import "google.golang.org/grpc"
 
-import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-const NAME = "Leader Election"
+const NAME = "Replicated Log"
 
 
 //=========================================== RepLog Service
@@ -21,17 +21,23 @@ const NAME = "Leader Election"
 */
 
 func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
-	return &ReplicatedLogService[T]{
+	rlService := &ReplicatedLogService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
-		SystemsList: opts.SystemsList,
+		Systems:			 opts.Systems,
 		AppendLogSignal: make(chan T, 100000),
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
 		Log: *clog.NewCustomLog(NAME),
 	}
+
+	for _, sys := range opts.SystemsList {
+		rlService.Systems.Store(sys.Host, sys)
+	}
+
+	return rlService
 }
 
 /*
@@ -66,27 +72,40 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatIntervalInMs * time.Millisecond)
+	timeoutChan := make(chan bool)
+	
+	go func() {
+		go func() {
+			for {
+				<- rlService.HeartBeatTimer.C
+				timeoutChan <- true
+				rlService.resetTimer()
+			}
+		}()
+	}()
 
-	for {
-		select {
-		
-		case newCmd :=<- rlService.AppendLogSignal:
+	go func() {
+		for {
+			newCmd :=<- rlService.AppendLogSignal
 			if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
-			rlService.resetTimer()
-		case <- rlService.HeartBeatTimer.C:
-			if rlService.CurrentSystem.State == system.Leader {
-				rlService.Log.Info("sending heartbeats...")
-				rlService.Heartbeat()
-			}
-
-			rlService.resetTimer()
-		case <- rlService.ForceHeartbeatSignal:
-			if rlService.CurrentSystem.State == system.Leader {
-				rlService.Log.Info("sending heartbeats after election...")
-				rlService.Heartbeat()
-			}
-
-			rlService.resetTimer()
 		}
-	}
+	}()
+
+	go func() {
+		for {
+			select {
+				case <- timeoutChan:
+					if rlService.CurrentSystem.State == system.Leader {
+						rlService.Log.Info("sending heartbeats...")
+						rlService.Heartbeat()
+					}
+				case <- rlService.ForceHeartbeatSignal:
+					rlService.resetTimer()
+					if rlService.CurrentSystem.State == system.Leader {
+						rlService.Log.Info("sending heartbeats after election...")
+						rlService.Heartbeat()
+					}
+				}
+		}
+	}()
 }
