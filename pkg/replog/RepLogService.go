@@ -74,13 +74,11 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	timeoutChan := make(chan bool)
 	
 	go func() {
-		go func() {
-			for {
-				<- rlService.HeartBeatTimer.C
-				timeoutChan <- true
-				rlService.resetTimer()
-			}
-		}()
+		for {
+			<- rlService.HeartBeatTimer.C
+			timeoutChan <- true
+			rlService.resetTimer()
+		}
 	}()
 
 	go func() {
