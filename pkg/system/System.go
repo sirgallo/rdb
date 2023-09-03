@@ -16,13 +16,10 @@ var Log = clog.NewCustomLog(NAME)
 
 
 func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) bool {
-	resetVotedFor := func (sys *System[T]) {
-		sys.VotedFor = utils.GetZero[string]()
-	}
-
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 
+	resetVotedFor := func (sys *System[T]) { sys.VotedFor = utils.GetZero[string]() }
 	sys.State = Follower
 
 	if opts.VotedFor != nil {
@@ -35,7 +32,7 @@ func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) bool {
 	return true
 }
 
-func (sys *System[T]) TransitionToCandidate() bool{
+func (sys *System[T]) TransitionToCandidate() bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 

@@ -80,7 +80,7 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 			--> if the Leader gets a response with a higher term than its own, revert to Follower state
 */
 
-func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {	
+func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, minSuccessfulResps := rlService.GetAliveSystemsAndMinSuccessResps()
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
@@ -162,7 +162,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 						--> signal that a higher term has been discovered and cancel all leftover requests
 */
 
-func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) {	
+func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) {
 	defer close(*rlRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())

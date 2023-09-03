@@ -86,7 +86,7 @@ func (leService *LeaderElectionService[T]) Election() {
 		is discovered, all go routines are signalled to stop broadcasting.
 */
 
-func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system.System[T], leRespChans LEResponseChannels) {		
+func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system.System[T], leRespChans LEResponseChannels) {
 	defer close(*leRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -26,7 +26,7 @@ import "github.com/sirgallo/raft/pkg/system"
 const NAME = "Raft"
 var Log = clog.NewCustomLog(NAME)
 
-func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {	
+func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
