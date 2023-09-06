@@ -10,10 +10,10 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-const NAME = "Replicated Log"
-
-
 //=========================================== RepLog Service
+
+
+const NAME = "Replicated Log"
 
 
 /*
@@ -75,9 +75,13 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	
 	go func() {
 		for {
-			<- rlService.HeartBeatTimer.C
-			timeoutChan <- true
-			rlService.resetTimer()
+			select {
+				case <- rlService.ResetTimeoutSignal:
+					rlService.resetTimer()
+				case <- rlService.HeartBeatTimer.C:
+					timeoutChan <- true
+					rlService.resetTimer()
+			}
 		}
 	}()
 
@@ -97,12 +101,19 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 						rlService.Heartbeat()
 					}
 				case <- rlService.ForceHeartbeatSignal:
-					rlService.resetTimer()
 					if rlService.CurrentSystem.State == system.Leader {
+						rlService.attemptResetTimeout()
 						rlService.Log.Info("sending heartbeats after election...")
 						rlService.Heartbeat()
 					}
 				}
 		}
 	}()
+}
+
+func (rlService *ReplicatedLogService[T]) attemptResetTimeout() {
+	select {
+		case rlService.ResetTimeoutSignal <- true:
+		default:
+	}
 }

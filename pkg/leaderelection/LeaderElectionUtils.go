@@ -26,6 +26,14 @@ func initTimeoutOnStartup() time.Duration {
 	return timeDuration
 }
 
+/*
+	Get Alive Systems And Min Votes:
+		helper method for both determining the current alive systems in the cluster and also the minimum votes
+		needed for transitioning to leader
+
+		--> minimum is found by floor(total systems / 2) + 1
+*/
+
 func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*system.System[T], int64) {
 	var aliveSystems []*system.System[T]
 	
@@ -37,6 +45,13 @@ func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*syst
 	totAliveSystems := len(aliveSystems) + 1
 	return aliveSystems, int64((totAliveSystems / 2) + 1)
 }
+
+/*
+	Reset Timer:
+		1.) Generate a randomized timeout between 150-300ms
+		2.) if unable to stop the timer, drain the timer
+		3.) reset the timer with the new random timeout period
+*/
 
 func (leService *LeaderElectionService[T]) resetTimer() {
 	reInitTimeout := func() {

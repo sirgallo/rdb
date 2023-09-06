@@ -38,6 +38,7 @@ type ReplicatedLogService [T system.MachineCommands] struct {
 	AppendLogSignal chan T
 	LeaderAcknowledgedSignal chan bool
 	LogCommitChannel chan []LogCommitChannelEntry[T]
+	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
 
 	Log clog.CustomLog

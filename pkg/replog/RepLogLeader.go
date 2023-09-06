@@ -51,7 +51,7 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 				case term :=<- *rlRespChans.HigherTermDiscovered:
 					rlService.Log.Warn("higher term discovered.")
 					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &term })
-					rlService.LeaderAcknowledgedSignal <- true
+					rlService.attemptLeadAckSignal()
 					return
 			}
 		}
@@ -79,7 +79,8 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 		3.) on responses
 			--> if the Leader receives a success signal from the majority of the nodes in the cluster, 
 				commit the logs to the state machine
-			--> if the Leader gets a response with a higher term than its own, revert to Follower state
+			--> if a response with a higher term than its own, revert to Follower state
+			--> if a response with a last log index less than current log index on leader, sync logs until up to date
 */
 
 func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
@@ -116,7 +117,8 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 			select {
 				case <- *rlRespChans.BroadcastClose:
 					if successfulResps >= int64(minSuccessfulResps) { 
-						rlService.Log.Warn("at least minimum successful responses received:", successfulResps)
+						rlService.Log.Info("at least minimum successful responses received:", successfulResps)
+						rlService.Log.Info("committing logs to state machine", successfulResps)
 						rlService.CommitLogsLeader()
 					} else { rlService.Log.Warn("minimum successful responses not received.") }
 					return
@@ -125,7 +127,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 				case term :=<- *rlRespChans.HigherTermDiscovered:
 					rlService.Log.Warn("higher term discovered.")
 					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &term })
-					rlService.LeaderAcknowledgedSignal <- true
+					rlService.attemptLeadAckSignal()
 					return
 			}
 		}
@@ -158,6 +160,8 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 					else if failure and the reply has higher term than the leader: 
 						--> update the state of the leader to follower, recognize a higher term and thus a more correct log
 						--> signal that a higher term has been discovered and cancel all leftover requests
+					otherwise if failure:
+						--> sync the follower up to the leader for any inconsistent log entries
 */
 
 func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) {
@@ -199,6 +203,10 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 						
 							*rlRespChans.HigherTermDiscovered <- res.Term	
 							cancel()
+						} else {
+							synced, syncErr := rlService.syncLogs(conn, sys.(*system.System[T]))
+							if syncErr != nil { return }
+							if synced { *rlRespChans.SuccessChan <- 1 }
 						}
 					}
 
@@ -210,9 +218,19 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 	appendEntryWG.Wait()
 }
 
+/*
+	Client Append Entry RPC:
+		helper method for making individual rpc calls
+		
+		perform exponential backoff
+		--> success: update system NextIndex and return result
+		--> error: remove system from system map and close all open connections
+*/
+
 func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
 	conn *grpc.ClientConn, 
-	sys *system.System[T], req ReplicatedLogRequest,
+	sys *system.System[T], 
+	req ReplicatedLogRequest,
 ) (*replogrpc.AppendEntryResponse, error) {
 	client := replogrpc.NewRepLogServiceClient(conn)
 
@@ -238,10 +256,33 @@ func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
 		return nil, err
 	}
 
-	sys.NextIndex = res.LatestLogIndex
+	sys.UpdateNextIndex(res.LatestLogIndex)
 	rlService.Systems.Store(sys.Host, sys)
 
 	return res, nil
+}
+
+/*
+	Sync Logs:
+		helper method for handling syncing followers who have inconsistent logs
+		
+		while unsuccessful response:
+			send AppendEntryRPC to follower with logs starting at the follower's NextIndex
+			if error: return false, error
+			on success: return true, nil --> the log is now up to date with the leader
+*/
+
+func (rlService *ReplicatedLogService[T]) syncLogs(conn *grpc.ClientConn, sys *system.System[T]) (bool, error) {
+	for {
+		req := ReplicatedLogRequest{
+			Host: sys.Host,
+			AppendEntry: rlService.prepareAppendEntryRPC(sys.NextIndex, false),
+		}
+
+		res, err := rlService.clientAppendEntryRPC(conn, sys, req)
+		if err != nil { return false, err }
+		if res.Success { return true, nil }
+	}
 }
 
 func (rlService *ReplicatedLogService[T]) createRLRespChannels() RLResponseChannels {
@@ -253,5 +294,12 @@ func (rlService *ReplicatedLogService[T]) createRLRespChannels() RLResponseChann
 		BroadcastClose: &broadcastClose,
 		SuccessChan: &successChan,
 		HigherTermDiscovered: &higherTermDiscovered,
+	}
+}
+
+func (rlService *ReplicatedLogService[T]) attemptLeadAckSignal() {
+	select {
+		case rlService.LeaderAcknowledgedSignal <- true:
+		default:
 	}
 }

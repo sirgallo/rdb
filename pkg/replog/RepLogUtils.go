@@ -18,8 +18,8 @@ import "github.com/sirgallo/raft/pkg/utils"
 		maybe find a way to get latest network MB/s and avg log size and determine based on this
 */
 
-func (rlService *ReplicatedLogService[T]) determineBatchSize() int{
-	return 10000
+func (rlService *ReplicatedLogService[T]) determineBatchSize() int {
+	return 1000
 }
 
 /*
@@ -32,7 +32,8 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 
 /*
 	prepare an AppendEntryRPC:
-		--> determine what entries to get, which will be the previous log index forward for that particular system
+		--> determine what entries to get, which will be the next log index forward for that particular system
+		--> batch the entries
 		--> encode the command entries to string
 		--> create the rpc request from the Log Entry
 */
@@ -96,6 +97,14 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 	return appendEntry
 }
 
+/*
+	Get Alive Systems And Min Success Resps:
+		helper method for both determining the current alive systems in the cluster and also the minimum successful responses
+		needed for committing logs to the state machine 
+
+		--> minimum is found by floor(total systems / 2) + 1
+*/
+
 func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
 	var aliveSystems []*system.System[T]
 	
@@ -107,6 +116,13 @@ func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([
 	totAliveSystems := len(aliveSystems) + 1
 	return aliveSystems, (totAliveSystems / 2) + 1
 }
+
+/*
+	Reset Timer:
+		used to reset the heartbeat timer:
+			--> if unable to stop the timer, drain the timer
+			--> reset the timer with the heartbeat interval
+*/
 
 func (rlService *ReplicatedLogService[T]) resetTimer() {
 	if ! rlService.HeartBeatTimer.Stop() {

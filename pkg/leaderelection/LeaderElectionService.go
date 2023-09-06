@@ -39,7 +39,7 @@ func NewLeaderElectionService[T comparable](opts *LeaderElectionOpts[T]) *Leader
 
 /*
 	start the replicated log module/service:
-		--> launch the grc server for AppendEntryRPC
+		--> launch the grpc server for AppendEntryRPC
 		--> start the leader election timeout
 */
 
@@ -69,20 +69,20 @@ func (leService *LeaderElectionService[T]) StartElectionTimeout() {
 
 	go func() {
 		for {
-			<- leService.ElectionTimer.C
-			timeoutChannel <- true
-			leService.resetTimer()
+			select {
+				case <- leService.ResetTimeoutSignal:
+					leService.resetTimer()
+				case <- leService.ElectionTimer.C:
+					timeoutChannel <- true
+					leService.resetTimer()
+			}
 		}
 	}()
 
 	go func() {
 		for {
-			select {
-				case <- leService.ResetTimeoutSignal: // if an appendEntry rpc is received on replicated log module
-					leService.resetTimer()
-				case <- timeoutChannel:
-					if leService.CurrentSystem.State == system.Follower { leService.Election() }
-				}
+			<- timeoutChannel
+			if leService.CurrentSystem.State == system.Follower { leService.Election() }
 		}
 	}()
 }

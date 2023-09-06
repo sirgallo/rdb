@@ -11,6 +11,15 @@ const NAME = "System"
 var Log = clog.NewCustomLog(NAME)
 
 
+/*
+	Transition To Follower:
+		1.) update state to Follower
+		2.) votedFor:
+			if voted for is supplied --> update voted for to the supplied hostname
+			else --> reset voted for to null
+		3.) if current term is supplied, update the system term
+*/
+
 func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
@@ -28,6 +37,13 @@ func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) bool {
 	return true
 }
 
+/*
+	Transition To Candidate:
+		1.) update the state to Candidate
+		2.) increment the current term by 1
+		3.) update voted for to self
+*/
+
 func (sys *System[T]) TransitionToCandidate() bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
@@ -39,6 +55,11 @@ func (sys *System[T]) TransitionToCandidate() bool {
 	Log.Warn("service with hostname:", sys.Host, "transitioned to candidate, starting election.")
 	return true
 }
+
+/*
+	Transition To Leader:
+		1.) update state to Leader
+*/
 
 func (sys *System[T]) TransitionToLeader() bool {
 	sys.SystemMutex.Lock()

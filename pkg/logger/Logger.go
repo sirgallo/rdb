@@ -13,6 +13,11 @@ func NewCustomLog(name string) *CustomLog {
 	}
 }
 
+/*
+	Debug, Error, Info, Warn:
+		different log levels
+*/
+
 func (cLog *CustomLog) Debug(msg ...interface{}) {
 	cLog.formatOutput(Debug, msg)
 } 
@@ -28,6 +33,13 @@ func (cLog *CustomLog) Info(msg ...interface{}) {
 func (cLog *CustomLog) Warn(msg ...interface{}) {
 	cLog.formatOutput(Warn, msg)
 }
+
+/*
+	Format Output:
+		helper method for each of the log levels
+		output is
+			(formatted time) [name] Log level: encoded message
+*/
 
 func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 	currTime := time.Now()
