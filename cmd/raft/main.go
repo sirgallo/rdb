@@ -5,6 +5,7 @@ import "math/rand"
 import "os"
 import "time"
 
+import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/service"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/replog"
@@ -39,7 +40,13 @@ func main() {
 	})
 
 	raftOpts := service.RaftServiceOpts[CommandEntry]{
+		Protocol: "tcp",
+		Ports: service.RaftPortOpts{
+			LeaderElection: 54321,
+			ReplicatedLog: 54322,
+		},
 		SystemsList: otherSystems,
+		ConnPoolOpts: connpool.ConnectionPoolOpts{ MaxConn: 10 },
 	}
 
 	raft := service.NewRaftService[CommandEntry](raftOpts)

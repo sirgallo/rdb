@@ -37,8 +37,6 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 		LastApplied: 0,
 		Replog: []*system.LogEntry[T]{},
 	}
-	
-	cpOpts := connpool.ConnectionPoolOpts{ MaxConn: 10 }
 
 	raft := &RaftService[T]{
 		Protocol: opts.Protocol,
@@ -50,28 +48,25 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 		raft.Systems.Store(sys.Host, sys)
 	}
 
-	rlConnPool := connpool.NewConnectionPool(cpOpts)
-	leConnPool := connpool.NewConnectionPool(cpOpts)
-
-	lePort := 54321
-	rlPort := 54322
-
-	rlOpts := &replog.ReplicatedLogOpts[T]{
-		Port:	rlPort,
-		ConnectionPool: rlConnPool,
-		CurrentSystem: currentSystem,
-		Systems: raft.Systems,
-	}
+	leConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
+	rlConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
 	leOpts := &leaderelection.LeaderElectionOpts[T]{
-		Port: lePort,
+		Port: opts.Ports.LeaderElection,
 		ConnectionPool: leConnPool,
 		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
 	}
 
-	rlService := replog.NewReplicatedLogService[T](rlOpts)
+	rlOpts := &replog.ReplicatedLogOpts[T]{
+		Port:	opts.Ports.ReplicatedLog,
+		ConnectionPool: rlConnPool,
+		CurrentSystem: currentSystem,
+		Systems: raft.Systems,
+	}
+
 	leService := leaderelection.NewLeaderElectionService[T](leOpts)
+	rlService := replog.NewReplicatedLogService[T](rlOpts)
 
 	raft.LeaderElection = leService
 	raft.ReplicatedLog = rlService
@@ -86,10 +81,10 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 */
 
 func (raft *RaftService[T]) StartRaftService() {
-	leListener, err := net.Listen("tcp", raft.LeaderElection.Port)
+	leListener, err := net.Listen(raft.Protocol, raft.LeaderElection.Port)
 	if err != nil { Log.Error("Failed to listen: %v", err) }
 
-	rlListener, err := net.Listen("tcp", raft.ReplicatedLog.Port)
+	rlListener, err := net.Listen(raft.Protocol, raft.ReplicatedLog.Port)
 	if err != nil { Log.Error("Failed to listen: %v", err) }
 
 	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)

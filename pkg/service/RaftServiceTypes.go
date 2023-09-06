@@ -15,6 +15,7 @@ type RaftPortOpts struct {
 
 type RaftServiceOpts [T comparable] struct {
 	Protocol string
+	Ports RaftPortOpts
 	SystemsList []*system.System[T]
 	ConnPoolOpts connpool.ConnectionPoolOpts
 }
