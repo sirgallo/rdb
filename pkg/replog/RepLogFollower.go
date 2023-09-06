@@ -34,16 +34,18 @@ import "github.com/sirgallo/raft/pkg/utils"
 func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
 	sys := &system.System[T]{
 		Host: req.LeaderId,
-		NextIndex: -1,
+		NextIndex: 0,
 	}
 
 	rlService.Systems.LoadOrStore(sys.Host, sys)
 	rlService.LeaderAcknowledgedSignal <- true
-	
-	handleReqTerm := func() bool { 
-		return req.Term >= rlService.CurrentSystem.CurrentTerm
-	}
 
+	failedNextIndex := func() int64 {
+		if req.PrevLogIndex - 1 < 0 { return 0 } 
+		return req.PrevLogIndex - 1
+	}()
+
+	handleReqTerm := func() bool { return req.Term >= rlService.CurrentSystem.CurrentTerm }
 	handleReqValidTermAtIndex := func() bool {
 		if len(rlService.CurrentSystem.Replog) == 0 || req.Entries == nil { return true }	// special case for when a system has empty replicated log or hearbeats where we don't check
 		return rlService.checkIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term == req.PrevLogTerm
@@ -52,24 +54,24 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	reqTermOk := handleReqTerm()
 	if ! reqTermOk { 
 		rlService.Log.Debug("request term lower than current term, returning failed response")
-		return rlService.generateResponse(req.PrevLogIndex - 1, reqTermOk), nil 
+		return rlService.generateResponse(failedNextIndex, reqTermOk), nil 
 	}
 
 	reqTermValid := handleReqValidTermAtIndex()
 	if ! reqTermValid { 
 		rlService.Log.Debug("log at request previous index has mismatched term or does not exist, returning failed response")
-		return rlService.generateResponse(req.PrevLogIndex - 1, reqTermValid), nil 
+		return rlService.generateResponse(failedNextIndex, reqTermValid), nil 
 	}
 
 	success, repLogErr := rlService.HandleReplicateLogs(req)
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	if repLogErr != nil { 
 		rlService.Log.Warn("replog err:", repLogErr)
-		return rlService.generateResponse(lastLogIndex, success), repLogErr 
+		return rlService.generateResponse(lastLogIndex + 1, success), repLogErr 
 	}
 
 	rlService.Log.Debug("leader acknowledged and returning successful response:", rlService.generateResponse(lastLogIndex, success))
-	return rlService.generateResponse(lastLogIndex, success), nil
+	return rlService.generateResponse(lastLogIndex + 1, success), nil
 }
 
 func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.AppendEntry) (bool, error) {
@@ -87,8 +89,8 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 			}
 
 			newLog := &system.LogEntry[T]{
-				Index:   entry.Index,
-				Term:    entry.Term,
+				Index: entry.Index,
+				Term: entry.Term,
 				Command: *cmd,
 			}
 
@@ -124,8 +126,8 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 
 func (rlService *ReplicatedLogService[T]) generateResponse(lastLogIndex int64, success bool) *replogrpc.AppendEntryResponse {
 	return &replogrpc.AppendEntryResponse{
-		Term:           rlService.CurrentSystem.CurrentTerm,
+		Term: rlService.CurrentSystem.CurrentTerm,
 		LatestLogIndex: lastLogIndex,
-		Success:        success,
+		Success: success,
 	}
 }

@@ -177,7 +177,7 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
 	sys := &system.System[T]{
 		Host: req.CandidateId,
-		NextIndex: -1,
+		NextIndex: 0,
 	}
 
 	leService.Systems.LoadOrStore(sys.Host, sys)
@@ -208,12 +208,10 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 
 	if req.CurrentTerm > leService.CurrentSystem.CurrentTerm {
 		leService.Log.Warn("RequestVoteRPC higher term")
-		leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
-			CurrentTerm: &req.CurrentTerm,
-		})
-
+		leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &req.CurrentTerm })
 		leService.resetTimer()
 	}
+
 	voteRejected := &lerpc.RequestVoteResponse{
 		Term: leService.CurrentSystem.CurrentTerm,
 		VoteGranted: false,

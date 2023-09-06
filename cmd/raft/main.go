@@ -27,11 +27,11 @@ func main() {
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
 	systemsList := []*system.System[CommandEntry]{
-		{ Host: "raftsrv1", NextIndex: -1 },
-		{ Host: "raftsrv2", NextIndex: -1 },
-		{ Host: "raftsrv3", NextIndex: -1 },
-		{ Host: "raftsrv4", NextIndex: -1 },
-		{ Host: "raftsrv5", NextIndex: -1 },
+		{ Host: "raftsrv1", NextIndex: 0 },
+		{ Host: "raftsrv2", NextIndex: 0 },
+		{ Host: "raftsrv3", NextIndex: 0 },
+		{ Host: "raftsrv4", NextIndex: 0 },
+		{ Host: "raftsrv5", NextIndex: 0 },
 	}
 
 	otherSystems := utils.Filter[*system.System[CommandEntry]](systemsList, func(sys *system.System[CommandEntry]) bool { 

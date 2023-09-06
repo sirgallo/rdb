@@ -37,7 +37,7 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 		--> create the rpc request from the Log Entry
 */
 
-func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex int64, isHeartbeat bool) *replogrpc.AppendEntry {
+func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64, isHeartbeat bool) *replogrpc.AppendEntry {
 	sysHostPtr := &rlService.CurrentSystem.Host
 
 	transformLogEntry := func(logEntry *system.LogEntry[T]) *replogrpc.LogEntry {
@@ -53,12 +53,13 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex int
 
 	var previousLogIndex, previousLogTerm int64
 
-	if prevLogIndex == -1 {
+	if nextIndex == 0 {
 		previousLogIndex = utils.GetZero[int64]() 
 		previousLogTerm = utils.GetZero[int64]()
 	} else {
-		previousLogIndex = prevLogIndex
-		previousLogTerm = rlService.CurrentSystem.Replog[prevLogIndex].Term
+		previousLog := rlService.CurrentSystem.Replog[nextIndex - 1]
+		previousLogIndex = previousLog.Index
+		previousLogTerm = previousLog.Term
 	}
 
 	var entries []*replogrpc.LogEntry
@@ -66,24 +67,21 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(prevLogIndex int
 	if isHeartbeat {
 		entries = nil
 	} else {
-		entriesToSend := func () []*system.LogEntry[T] {
-			if prevLogIndex == -1 { return rlService.CurrentSystem.Replog }
-			return rlService.CurrentSystem.Replog[previousLogIndex:]
-		}()
-
-		batchedEntries := func() []*system.LogEntry[T] {
+		entriesToSend := func() []*system.LogEntry[T] {
 			batchSize := rlService.determineBatchSize()
-			
-			var earliestBatch []*system.LogEntry[T]
-			
-			if len(entriesToSend) <= batchSize {
-				earliestBatch = entriesToSend
-			} else { earliestBatch = entriesToSend[:batchSize - 1] }
-			
-			return earliestBatch
+
+			if nextIndex == 0 { 
+				if len(rlService.CurrentSystem.Replog) <= batchSize {
+					return rlService.CurrentSystem.Replog 
+				} else { return rlService.CurrentSystem.Replog[:batchSize] }
+			}
+
+			if len(rlService.CurrentSystem.Replog[nextIndex:]) <= batchSize { 
+				return rlService.CurrentSystem.Replog[nextIndex:]
+			} else { return rlService.CurrentSystem.Replog[nextIndex:batchSize] }
 		}()
 
-		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](batchedEntries, transformLogEntry)
+		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
 	}
 
 	appendEntry := &replogrpc.AppendEntry{
