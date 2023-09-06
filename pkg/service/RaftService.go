@@ -38,13 +38,12 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 		Replog: []*system.LogEntry[T]{},
 	}
 	
-	cpOpts := connpool.ConnectionPoolOpts{
-		MaxConn: 10,
-	}
+	cpOpts := connpool.ConnectionPoolOpts{ MaxConn: 10 }
 
 	raft := &RaftService[T]{
 		Protocol: opts.Protocol,
 		Systems: &sync.Map{},
+		CurrentSystem: currentSystem,
 	}
 
 	for _, sys := range opts.SystemsList {
@@ -58,16 +57,16 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 	rlPort := 54322
 
 	rlOpts := &replog.ReplicatedLogOpts[T]{
-		Port:           rlPort,
+		Port:	rlPort,
 		ConnectionPool: rlConnPool,
-		CurrentSystem:  currentSystem,
+		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
 	}
 
 	leOpts := &leaderelection.LeaderElectionOpts[T]{
-		Port:           lePort,
+		Port: lePort,
 		ConnectionPool: leConnPool,
-		CurrentSystem:  currentSystem,
+		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
 	}
 

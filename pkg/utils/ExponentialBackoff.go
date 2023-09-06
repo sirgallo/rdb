@@ -10,14 +10,14 @@ import "time"
 
 type ExpBackoffOpts struct {
 	TimeoutInMilliseconds int
-	MaxRetries            *int // optional field, use a pointer
+	MaxRetries *int // optional field, use a pointer
 }
 
 type ExponentialBackoffStrat [T comparable] struct {
-	depth          int
+	depth int
 	initialTimeout int
 	currentTimeout int
-	maxRetries     *int
+	maxRetries *int
 }
 
 

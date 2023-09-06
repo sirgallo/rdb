@@ -25,7 +25,7 @@ func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *Replica
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
-		Systems:			 opts.Systems,
+		Systems: opts.Systems,
 		AppendLogSignal: make(chan T, 100000),
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),

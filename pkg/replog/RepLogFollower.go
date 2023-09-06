@@ -38,28 +38,27 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	}
 
 	rlService.Systems.LoadOrStore(sys.Host, sys)
-
 	rlService.LeaderAcknowledgedSignal <- true
-	success := true
 	
 	handleReqTerm := func() bool { 
 		return req.Term >= rlService.CurrentSystem.CurrentTerm
 	}
-	handleReqValidTermAtReqIndex := func() bool {
+
+	handleReqValidTermAtIndex := func() bool {
 		if len(rlService.CurrentSystem.Replog) == 0 || req.Entries == nil { return true }	// special case for when a system has empty replicated log or hearbeats where we don't check
 		return rlService.checkIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term == req.PrevLogTerm
 	}
 
-	success = handleReqTerm()
-	if ! success { 
+	reqTermOk := handleReqTerm()
+	if ! reqTermOk { 
 		rlService.Log.Debug("request term lower than current term, returning failed response")
-		return rlService.generateResponse(req.PrevLogIndex - 1, success), nil 
+		return rlService.generateResponse(req.PrevLogIndex - 1, reqTermOk), nil 
 	}
 
-	success = handleReqValidTermAtReqIndex()
-	if ! success { 
+	reqTermValid := handleReqValidTermAtIndex()
+	if ! reqTermValid { 
 		rlService.Log.Debug("log at request previous index has mismatched term or does not exist, returning failed response")
-		return rlService.generateResponse(req.PrevLogIndex - 1, success), nil 
+		return rlService.generateResponse(req.PrevLogIndex - 1, reqTermValid), nil 
 	}
 
 	success, repLogErr := rlService.HandleReplicateLogs(req)

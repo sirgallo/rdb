@@ -10,12 +10,12 @@ import "github.com/sirgallo/raft/pkg/system"
 
 
 type ReplicatedLogOpts [T system.MachineCommands] struct {
-	Port           int
+	Port int
 	ConnectionPool *connpool.ConnectionPool
 
 	CurrentSystem  *system.System[T]
-	SystemsList    []*system.System[T]
-	Systems 			 *sync.Map
+	SystemsList []*system.System[T]
+	Systems *sync.Map
 }
 
 type LogCommitChannelEntry [T system.MachineCommands] struct {
@@ -25,26 +25,26 @@ type LogCommitChannelEntry [T system.MachineCommands] struct {
 
 type ReplicatedLogService [T system.MachineCommands] struct {
 	replogrpc.UnimplementedRepLogServiceServer
-	Port           string
+	Port string
 	ConnectionPool *connpool.ConnectionPool
 
 	// Persistent State
 	CurrentSystem *system.System[T]
-	Systems 			*sync.Map
+	Systems *sync.Map
 
 	HeartBeatTimer *time.Timer
 
 	// Module Specific
-	AppendLogSignal          chan T
+	AppendLogSignal chan T
 	LeaderAcknowledgedSignal chan bool
-	LogCommitChannel         chan []LogCommitChannelEntry[T]
-	ForceHeartbeatSignal		 chan bool
+	LogCommitChannel chan []LogCommitChannelEntry[T]
+	ForceHeartbeatSignal chan bool
 
 	Log clog.CustomLog
 }
 
 type ReplicatedLogRequest struct {
-	Host        string
+	Host string
 	AppendEntry *replogrpc.AppendEntry
 }
 

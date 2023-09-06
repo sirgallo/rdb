@@ -1,9 +1,5 @@
 package system
 
-// import "sync"
-// import "sync/atomic"
-// import "unsafe"
-
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/utils"
 

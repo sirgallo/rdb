@@ -10,10 +10,11 @@ import "github.com/sirgallo/raft/pkg/utils"
 import "google.golang.org/grpc"
 
 
+//=========================================== Leader Election Service
+
+
 const NAME = "Leader Election"
 
-
-//=========================================== Leader Election Service
 
 /*
 	create a new service instance with passable options
@@ -22,18 +23,17 @@ const NAME = "Leader Election"
 
 func NewLeaderElectionService[T comparable](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
 	leService := &LeaderElectionService[T]{
-		Port:                utils.NormalizePort(opts.Port),
-		ConnectionPool:      opts.ConnectionPool,
-		CurrentSystem:       opts.CurrentSystem,
-		Systems:						 opts.Systems,
-		Timeout:             initTimeoutOnStartup(),
-		ResetTimeoutSignal:  make(chan bool),
+		Port: utils.NormalizePort(opts.Port),
+		ConnectionPool: opts.ConnectionPool,
+		CurrentSystem: opts.CurrentSystem,
+		Systems: opts.Systems,
+		Timeout: initTimeoutOnStartup(),
+		ResetTimeoutSignal: make(chan bool),
 		HeartbeatOnElection: make(chan bool),
-		Log: 								 *clog.NewCustomLog(NAME),
+		Log: *clog.NewCustomLog(NAME),
 	}
 
 	leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{})
-
 	return leService
 }
 

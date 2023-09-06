@@ -13,6 +13,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 //=========================================== RepLog Leader
 
+
 /*
 	Heartbeat:
 		for all systems in the System Map, send an empty AppendEntryRPC
@@ -47,8 +48,9 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 					return
 				case <- *rlRespChans.SuccessChan:
 					atomic.AddInt64(&successfulResps, 1)
-				case <- *rlRespChans.HigherTermDiscovered:
+				case term :=<- *rlRespChans.HigherTermDiscovered:
 					rlService.Log.Warn("higher term discovered.")
+					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &term })
 					rlService.LeaderAcknowledgedSignal <- true
 					return
 			}
@@ -123,10 +125,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 					atomic.AddInt64(&successfulResps, 1)
 				case term :=<- *rlRespChans.HigherTermDiscovered:
 					rlService.Log.Warn("higher term discovered.")
-					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
-						CurrentTerm: &term,
-					})
-
+					rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &term })
 					rlService.LeaderAcknowledgedSignal <- true
 					return
 			}
@@ -213,7 +212,10 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 	appendEntryWG.Wait()
 }
 
-func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(conn *grpc.ClientConn, sys *system.System[T], req ReplicatedLogRequest) (*replogrpc.AppendEntryResponse, error) {
+func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
+	conn *grpc.ClientConn, 
+	sys *system.System[T], req ReplicatedLogRequest,
+) (*replogrpc.AppendEntryResponse, error) {
 	client := replogrpc.NewRepLogServiceClient(conn)
 
 	appendEntryRPC := func () (*replogrpc.AppendEntryResponse, error) {
