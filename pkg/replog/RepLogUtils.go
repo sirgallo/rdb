@@ -78,7 +78,7 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 
 			if len(rlService.CurrentSystem.Replog[nextIndex:]) <= batchSize { 
 				return rlService.CurrentSystem.Replog[nextIndex:]
-			} else { return rlService.CurrentSystem.Replog[nextIndex:batchSize] }
+			} else { return rlService.CurrentSystem.Replog[nextIndex:nextIndex + int64(batchSize)] }
 		}()
 
 		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
