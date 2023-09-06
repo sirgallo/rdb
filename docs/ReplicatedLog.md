@@ -3,10 +3,7 @@
 
 ## Overview
 
-One of the major components of [Raft Consensus](https://raft.github.io/raft.pdf) is the leader election between systems within the cluster. Leader election is the method by which the systems reach consensus.
-
-
-## Design
+One of the major components of [Raft Consensus](https://raft.github.io/raft.pdf) is the replicated log shared between systems within the cluster. The replicated log helps maintain a log of all actions that have been performed on the state machine.
 
 
 ### Replicated Log
