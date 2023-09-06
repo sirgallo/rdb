@@ -50,10 +50,8 @@ func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 			return ErrorColor
 		} else if level == Info {
 			return InfoColor
-		} else{
-			return WarnColor
-		}
+		} else { return WarnColor }
 	}()
 
-	fmt.Printf("%s[%s](%s) %s: %s\n", color, cLog.Name, formattedTime, Bold + level, Reset + encodedMsg)
+	fmt.Printf("%s(%s) [%s] %s: %s\n", color, formattedTime, cLog.Name, Bold + level, Reset + encodedMsg)
 }
