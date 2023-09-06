@@ -87,6 +87,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 	aliveSystems, minSuccessfulResps := rlService.GetAliveSystemsAndMinSuccessResps()
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	requests := []ReplicatedLogRequest{}
+	successfulResps := int64(0)
 	
 	newLog := &system.LogEntry[T]{
 		Index: lastLogIndex + 1,
@@ -104,8 +105,6 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 		
 		requests = append(requests, request)
 	}
-
-	successfulResps := int64(0)
 	
 	var repLogWG sync.WaitGroup
 
@@ -174,6 +173,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 
 		go func(req ReplicatedLogRequest) {
 			defer appendEntryWG.Done()
+			
 			sys, _ := rlService.Systems.Load(req.Host)
 
 			conn, connErr := rlService.ConnectionPool.GetConnection(sys.(*system.System[T]).Host, rlService.Port)
@@ -195,9 +195,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 					} else {
 						if res.Term > rlService.CurrentSystem.CurrentTerm { 
 							rlService.Log.Warn("higher term found on response for AppendEntryRPC:", res.Term)
-							rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{
-								CurrentTerm: &res.Term,
-							})
+							rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &res.Term })
 						
 							*rlRespChans.HigherTermDiscovered <- res.Term	
 							cancel()
@@ -218,7 +216,7 @@ func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
 ) (*replogrpc.AppendEntryResponse, error) {
 	client := replogrpc.NewRepLogServiceClient(conn)
 
-	appendEntryRPC := func () (*replogrpc.AppendEntryResponse, error) {
+	appendEntryRPC := func() (*replogrpc.AppendEntryResponse, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Millisecond)
 		defer cancel()
 		

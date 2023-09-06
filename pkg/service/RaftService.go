@@ -95,14 +95,14 @@ func (raft *RaftService[T]) StartRaftService() {
 	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)
 	go raft.LeaderElection.StartLeaderElectionService(&leListener)
 
-	go func () {
+	go func() {
 		for {
 			<- raft.ReplicatedLog.LeaderAcknowledgedSignal
 			raft.LeaderElection.ResetTimeoutSignal <- true
 		}
 	}()
 
-	go func () {
+	go func() {
 		for {
 			<- raft.LeaderElection.HeartbeatOnElection
 			raft.ReplicatedLog.ForceHeartbeatSignal <- true

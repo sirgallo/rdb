@@ -33,7 +33,7 @@ func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 	currTime := time.Now()
 	formattedTime := currTime.Format("2006-01-02 15:04:05.000")
 
-	encodedMsg := func () string {
+	encodedMsg := func() string {
 		encodeTransform := func(chunk interface{}) string {
 			encoded, _ := utils.EncodeStructToString[interface{}](chunk)
 			return encoded
@@ -43,7 +43,7 @@ func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 		return strings.Join(encodedChunks, " ")
 	}()
 
-	color := func () LogColor {
+	color := func() LogColor {
 		if level == Debug { 
 			return DebugColor 
 		} else if level == Error { 

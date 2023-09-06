@@ -46,7 +46,7 @@ func main() {
 
 	go raft.StartRaftService()
 
-	go func () {
+	go func() {
 		for {
 			cmdEntry := &CommandEntry{
 				Action: "insert",
@@ -60,7 +60,7 @@ func main() {
 		}
 	}()
 
-	go func () {
+	go func() {
 		for {
 			logs := <- raft.ReplicatedLog.LogCommitChannel
 			completedLogs := []replog.LogCommitChannelEntry[CommandEntry]{}
