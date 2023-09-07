@@ -37,9 +37,12 @@ func NewKeyValStore() *KeyValStateMachine {
 	ops := func(operation KeyValOp) (KeyValPair, error) {
 		switch operation.Action {
 			case GET: 
-				keyVal, ok := keyValStateMachine.State.Load(operation.Data.Key)
+				val, ok := keyValStateMachine.State.Load(operation.Data.Key)
 				if ok {
-					return keyVal.(KeyValPair), nil
+					return KeyValPair{ 
+						Key: operation.Data.Key, 
+						Value: val.(string),
+					}, nil
 				} else { return utils.GetZero[KeyValPair](), nil }
 			case SET:
 				keyValStateMachine.State.Store(operation.Data.Key, operation.Data.Value)

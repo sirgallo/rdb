@@ -33,6 +33,8 @@ type RaftService [T system.MachineCommands] struct {
 	ReplicatedLog *replog.ReplicatedLogService[T]
 	Relay *relay.RelayService[T]
 
+	CommandChannel chan T
+
 	// Volatile State
 	CommitIndex int64
 	LastApplied int64

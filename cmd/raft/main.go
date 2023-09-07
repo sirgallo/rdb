@@ -60,13 +60,6 @@ func main() {
 
 	go func() {
 		for {
-			/*
-			cmdEntry := &CommandEntry{
-				Action: "insert",
-				Data: "hi!",
-			}
-			*/
-
 			cmdEntry := &keyvalstore.KeyValOp{
 				Action: keyvalstore.SET,
 				Data: keyvalstore.KeyValPair{
@@ -75,10 +68,7 @@ func main() {
 				},
 			}
 
-			if raft.CurrentSystem.State == system.Leader {
-				raft.ReplicatedLog.AppendLogSignal <- *cmdEntry
-			} else { raft.Relay.RelayChannel <- *cmdEntry }
-			
+			raft.CommandChannel <- *cmdEntry
 			
 			randomNumber := rand.Intn(96) + 5
 			time.Sleep(time.Duration(randomNumber) * time.Millisecond)
@@ -95,6 +85,16 @@ func main() {
 				if kvErr != nil { 
 					log.Complete = false
 				} else { log.Complete = true }
+
+				getEntry := keyvalstore.KeyValOp{
+					Action: keyvalstore.GET,
+					Data: keyvalstore.KeyValPair{
+						Key: "hello",
+					},
+				}
+
+				kv, _ := kvstore.Ops(getEntry)
+				Log.Debug("key val pair:", kv)
 
 				completedLogs = append(completedLogs, log)
 			}

@@ -43,6 +43,7 @@ func NewRaftService [T system.MachineCommands](opts RaftServiceOpts[T]) *RaftSer
 		Protocol: opts.Protocol,
 		Systems: &sync.Map{},
 		CurrentSystem: currentSystem,
+		CommandChannel: make(chan T, 100000),
 	}
 
 	for _, sys := range opts.SystemsList {
@@ -123,6 +124,15 @@ func (raft *RaftService[T]) StartRaftService() {
 		for {
 			cmd :=<- raft.Relay.RelayedAppendLogSignal
 			raft.ReplicatedLog.AppendLogSignal <- cmd
+		}
+	}()
+
+	go func() {
+		for {
+			cmdEntry :=<- raft.CommandChannel
+			if raft.CurrentSystem.State == system.Leader {
+				raft.ReplicatedLog.AppendLogSignal <- cmdEntry
+			} else { raft.Relay.RelayChannel <- cmdEntry }
 		}
 	}()
 	
