@@ -44,6 +44,7 @@ func main() {
 		Ports: service.RaftPortOpts{
 			LeaderElection: 54321,
 			ReplicatedLog: 54322,
+			Relay: 54323,
 		},
 		SystemsList: otherSystems,
 		ConnPoolOpts: connpool.ConnectionPoolOpts{ MaxConn: 10 },
@@ -60,7 +61,10 @@ func main() {
 				Data: "hi!",
 			}
 
-			raft.ReplicatedLog.AppendLogSignal <- *cmdEntry
+			if raft.CurrentSystem.State == system.Leader {
+				raft.ReplicatedLog.AppendLogSignal <- *cmdEntry
+			} else { raft.Relay.RelayChannel <- *cmdEntry }
+			
 			
 			randomNumber := rand.Intn(96) + 5
 			time.Sleep(time.Duration(randomNumber) * time.Millisecond)

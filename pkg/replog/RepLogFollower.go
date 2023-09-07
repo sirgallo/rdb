@@ -66,6 +66,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		return rlService.generateResponse(failedNextIndex, false), nil 
 	}
 
+	rlService.CurrentSystem.SetCurrentLeader(req.LeaderId)
 	_, repLogErr := rlService.HandleReplicateLogs(req)
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	

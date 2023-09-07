@@ -1,19 +1,16 @@
 package statemachine
 
 
-type StateMachineOperation [T string, V comparable] struct {
+type Action = string
+type Data = comparable
+type State = comparable
+
+type StateMachineOperation [T Action, U Data] struct {
 	Action T
-	Data V
+	Data U
 }
 
-type StateMachineOperationMap [T string, V comparable] struct {
+type StateMachine [T Action, U Data, V State] struct {
+	State V
 	Ops map [T] func (operation StateMachineOperation[T, V]) (V, error)
-}
-
-type StateMachineClientConstructor [T any] struct {
-	StateMachineConnector T
-}
-
-type StateMachineClient [T any, U string, V comparable ] interface {
-	NewStateMachineOperationMap(opts StateMachineClientConstructor[T]) *StateMachineOperationMap[U, V]
 }

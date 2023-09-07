@@ -20,7 +20,7 @@ const NAME = "Replicated Log"
 	create a new service instance with passable options
 */
 
-func NewReplicatedLogService [T comparable](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
+func NewReplicatedLogService [T system.MachineCommands](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
 	rlService := &ReplicatedLogService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,

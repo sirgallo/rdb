@@ -71,6 +71,24 @@ func (sys *System[T]) TransitionToLeader() bool {
 	return true
 }
 
+/*
+	Set Current Leader:
+		1.) update the current leader id if not already
+*/
+
+func (sys *System[T]) SetCurrentLeader(leaderId string) bool {
+	sys.SystemMutex.Lock()
+	defer sys.SystemMutex.Unlock()
+
+	if sys.CurrentLeader != leaderId { sys.CurrentLeader = leaderId }
+	return true
+}
+
+/*
+	Update Next Index:
+		1.) update the next log index to send for a particular system
+*/
+
 func (sys *System[T]) UpdateNextIndex(newIndex int64) bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()

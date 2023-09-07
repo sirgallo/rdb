@@ -13,7 +13,7 @@ package system
 		to indicate this
 */
 
-func DetermineLastLogIdxAndTerm [T comparable](replog []*LogEntry[T]) (int64, int64) {
+func DetermineLastLogIdxAndTerm [T MachineCommands](replog []*LogEntry[T]) (int64, int64) {
 	logLength := len(replog)
 	var lastLogIndex, lastLogTerm int64
 	

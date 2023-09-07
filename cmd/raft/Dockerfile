@@ -11,5 +11,6 @@ RUN go build -o raftsrv ./cmd/raft/main.go
 
 EXPOSE 54321
 EXPOSE 54322
+EXPOSE 54323
 
 CMD ["./raftsrv"]

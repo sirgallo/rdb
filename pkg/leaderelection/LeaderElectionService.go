@@ -21,7 +21,7 @@ const NAME = "Leader Election"
 	--> initialize state to Follower and initialize a random timeout period for leader election
 */
 
-func NewLeaderElectionService[T comparable](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
+func NewLeaderElectionService[T system.MachineCommands](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
 	leService := &LeaderElectionService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,

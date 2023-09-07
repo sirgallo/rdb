@@ -9,6 +9,7 @@ import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
+import "github.com/sirgallo/raft/pkg/relay"
 import "github.com/sirgallo/raft/pkg/system"
 
 
@@ -26,7 +27,7 @@ import "github.com/sirgallo/raft/pkg/system"
 const NAME = "Raft"
 var Log = clog.NewCustomLog(NAME)
 
-func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
+func NewRaftService [T system.MachineCommands](opts RaftServiceOpts[T]) *RaftService[T] {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
@@ -50,6 +51,7 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 
 	leConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	rlConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
+	rConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
 	leOpts := &leaderelection.LeaderElectionOpts[T]{
 		Port: opts.Ports.LeaderElection,
@@ -65,11 +67,20 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 		Systems: raft.Systems,
 	}
 
+	rOpts := &relay.RelayOpts[T]{
+		Port:	opts.Ports.Relay,
+		ConnectionPool: rConnPool,
+		CurrentSystem: currentSystem,
+		Systems: raft.Systems,
+	}
+
 	leService := leaderelection.NewLeaderElectionService[T](leOpts)
 	rlService := replog.NewReplicatedLogService[T](rlOpts)
+	rService := relay.NewRelayService[T](rOpts)
 
 	raft.LeaderElection = leService
 	raft.ReplicatedLog = rlService
+	raft.Relay = rService
 
 	return raft
 }
@@ -81,14 +92,18 @@ func NewRaftService [T comparable](opts RaftServiceOpts[T]) *RaftService[T] {
 */
 
 func (raft *RaftService[T]) StartRaftService() {
-	leListener, err := net.Listen(raft.Protocol, raft.LeaderElection.Port)
-	if err != nil { Log.Error("Failed to listen: %v", err) }
+	leListener, leErr := net.Listen(raft.Protocol, raft.LeaderElection.Port)
+	if leErr != nil { Log.Error("Failed to listen: %v", leErr) }
 
-	rlListener, err := net.Listen(raft.Protocol, raft.ReplicatedLog.Port)
-	if err != nil { Log.Error("Failed to listen: %v", err) }
+	rlListener, rlErr := net.Listen(raft.Protocol, raft.ReplicatedLog.Port)
+	if rlErr != nil { Log.Error("Failed to listen: %v", rlErr) }
+
+	rListener, rErr := net.Listen(raft.Protocol, raft.Relay.Port)
+	if rErr != nil { Log.Error("Failed to listen: %v", rErr) }
 
 	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)
 	go raft.LeaderElection.StartLeaderElectionService(&leListener)
+	go raft.Relay.StartRelayService(&rListener)
 
 	go func() {
 		for {
@@ -101,6 +116,13 @@ func (raft *RaftService[T]) StartRaftService() {
 		for {
 			<- raft.LeaderElection.HeartbeatOnElection
 			raft.ReplicatedLog.ForceHeartbeatSignal <- true
+		}
+	}()
+
+	go func() {
+		for {
+			cmd :=<- raft.Relay.RelayedAppendLogSignal
+			raft.ReplicatedLog.AppendLogSignal <- cmd
 		}
 	}()
 	

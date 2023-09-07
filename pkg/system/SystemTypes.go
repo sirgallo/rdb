@@ -22,6 +22,7 @@ type System [T MachineCommands] struct {
 	CommitIndex int64
 	LastApplied int64
 	VotedFor string
+	CurrentLeader string
 
 	Replog []*LogEntry[T]
 
