@@ -22,7 +22,7 @@ const NAME = "Relay"
 	create a new service instance with passable options
 */
 
-func NewRelayService[T comparable](opts *RelayOpts[T]) *RelayService[T] {
+func NewRelayService [T system.MachineCommands](opts *RelayOpts[T]) *RelayService[T] {
 	rService := &RelayService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
