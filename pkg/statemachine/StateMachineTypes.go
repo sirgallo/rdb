@@ -12,5 +12,5 @@ type StateMachineOperation [T Action, U Data] struct {
 
 type StateMachine [T Action, U Data, V State] struct {
 	State V
-	Ops map [T] func (operation StateMachineOperation[T, V]) (V, error)
+	Ops func(operation StateMachineOperation[T, U]) (U, error)
 }
