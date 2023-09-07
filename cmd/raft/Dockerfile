@@ -3,6 +3,7 @@ FROM golang:1.20
 WORKDIR /usr/src/raft
 
 COPY pkg ./pkg
+COPY generated ./generated
 COPY cmd ./cmd
 COPY go.mod \
   go.sum ./

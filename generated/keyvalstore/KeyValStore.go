@@ -28,6 +28,7 @@ const (
 	DELETE KeyValOps = "DELETE"
 )
 
+
 func NewKeyValStore() *KeyValStateMachine {
 	keyValStateMachine := &KeyValStateMachine{
 		State: &sync.Map{},

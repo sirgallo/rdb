@@ -118,7 +118,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 				case <- *rlRespChans.BroadcastClose:
 					if successfulResps >= int64(minSuccessfulResps) { 
 						rlService.Log.Info("at least minimum successful responses received:", successfulResps)
-						rlService.Log.Info("committing logs to state machine", successfulResps)
+						rlService.Log.Info("committing logs to state machine")
 						rlService.CommitLogsLeader()
 					} else { rlService.Log.Warn("minimum successful responses not received.") }
 					return
