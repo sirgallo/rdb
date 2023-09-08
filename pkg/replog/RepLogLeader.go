@@ -13,7 +13,6 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 //=========================================== RepLog Leader
 
-
 /*
 	Heartbeat:
 		for all systems in the System Map, send an empty AppendEntryRPC
@@ -24,16 +23,14 @@ import "github.com/sirgallo/raft/pkg/utils"
 func (rlService *ReplicatedLogService[T]) Heartbeat() {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, _ := rlService.GetAliveSystemsAndMinSuccessResps()
-	// lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-	// nextIndex := lastLogIndex + 1
-	
+
 	requests := []ReplicatedLogRequest{}
 	successfulResps := int64(0)
 
 	for _, sys := range aliveSystems {
 		request := ReplicatedLogRequest{
 			Host: sys.Host,
-			AppendEntry: rlService.prepareAppendEntryRPC(sys.NextIndex, true),
+			AppendEntry: rlService.PrepareAppendEntryRPC(sys.NextIndex, true),
 		}
 
 		requests = append(requests, request)
@@ -80,7 +77,7 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 		2.) prepare AppendEntryRPCs for each system in the Systems Map
 			--> determine the next index of the system that the rpc is prepared for from the system object at NextIndex
 		3.) on responses
-			--> if the Leader receives a success signal from the majority of the nodes in the cluster, 
+			--> if the Leader receives a success signal from the majority of the nodes in the cluster,
 				commit the logs to the state machine and apply committed logs to the WAL
 			--> if a response with a higher term than its own, revert to Follower state
 			--> if a response with a last log index less than current log index on leader, sync logs until up to date
@@ -94,7 +91,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 
 	requests := []ReplicatedLogRequest{}
 	successfulResps := int64(0)
-	
+
 	newLog := &system.LogEntry[T]{
 		Index: nextIndex,
 		Term: rlService.CurrentSystem.CurrentTerm,
@@ -106,12 +103,12 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 	for _, sys := range aliveSystems {
 		request := ReplicatedLogRequest{
 			Host: sys.Host,
-			AppendEntry: rlService.prepareAppendEntryRPC(sys.NextIndex, false),
+			AppendEntry: rlService.PrepareAppendEntryRPC(sys.NextIndex, false),
 		}
-		
+
 		requests = append(requests, request)
 	}
-	
+
 	var repLogWG sync.WaitGroup
 
 	repLogWG.Add(1)
@@ -121,15 +118,15 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 		for {
 			select {
 				case <- *rlRespChans.BroadcastClose:
-					if successfulResps >= int64(minSuccessfulResps) { 
+					if successfulResps >= int64(minSuccessfulResps) {
 						rlService.Log.Info("at least minimum successful responses received:", successfulResps)
 						rlService.Log.Info("committing logs to state machine and appending to write ahead log")
 
 						rlService.CommitLogsLeader()
 
 						logAsBytes, encErr := system.TransformLogEntryToBytes[T](newLog)
-						if encErr != nil { rlService.Log.Error("write err:", encErr.Error())  }
-	
+						if encErr != nil { rlService.Log.Error("write err:", encErr.Error()) }
+
 						rlService.CurrentSystem.WAL.WriteStream <- logAsBytes
 					} else { rlService.Log.Warn("minimum successful responses not received.") }
 					return
@@ -159,16 +156,16 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 /*
 	Shared Broadcast RPC function:
 		utilized by all three functions above
-	
+
 		for requests to be broadcasted:
 			1.) send AppendEntryRPCs in parallel to each follower in the cluster
 			2.) in each go routine handling each request, perform exponential backoff on failed requests until max retries
-			3.) 
+			3.)
 				if err: remove system from system map and close all connections -- it has failed
 				if res:
-					if success: 
+					if success:
 						--> update total successful replies and update the next index of the system to the last log index of the reply
-					else if failure and the reply has higher term than the leader: 
+					else if failure and the reply has higher term than the leader:
 						--> update the state of the leader to follower, recognize a higher term and thus a more correct log
 						--> signal that a higher term has been discovered and cancel all leftover requests
 					otherwise if failure:
@@ -188,13 +185,13 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 
 		go func(req ReplicatedLogRequest) {
 			defer appendEntryWG.Done()
-			
+
 			s, _ := rlService.Systems.Load(req.Host)
 			sys := s.(*system.System[T])
 
 			conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
-			if connErr != nil { 
-				rlService.Log.Error("Failed to connect to", sys.Host + rlService.Port, ":", connErr.Error()) 
+			if connErr != nil {
+				rlService.Log.Error("Failed to connect to", sys.Host+rlService.Port, ":", connErr.Error())
 				return
 			}
 
@@ -202,18 +199,18 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 				case <- ctx.Done():
 					rlService.ConnectionPool.PutConnection(sys.Host, conn)
 					return
-				default:	
+				default:
 					res, err := rlService.clientAppendEntryRPC(conn, sys, req)
 					if err != nil { return }
 
 					if res.Success {
 						*rlRespChans.SuccessChan <- 1
 					} else {
-						if res.Term > rlService.CurrentSystem.CurrentTerm { 
+						if res.Term > rlService.CurrentSystem.CurrentTerm {
 							rlService.Log.Warn("higher term found on response for AppendEntryRPC:", res.Term)
 							rlService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &res.Term })
-						
-							*rlRespChans.HigherTermDiscovered <- res.Term	
+
+							*rlRespChans.HigherTermDiscovered <- res.Term
 							cancel()
 						} else {
 							rlService.Log.Warn("preparing to sync logs for:", sys.Host)
@@ -232,39 +229,39 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 /*
 	Client Append Entry RPC:
 		helper method for making individual rpc calls
-		
+
 		perform exponential backoff
 		--> success: update system NextIndex and return result
 		--> error: remove system from system map and close all open connections
 */
 
 func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
-	conn *grpc.ClientConn, 
-	sys *system.System[T], 
+	conn *grpc.ClientConn,
+	sys *system.System[T],
 	req ReplicatedLogRequest,
 ) (*replogrpc.AppendEntryResponse, error) {
 	client := replogrpc.NewRepLogServiceClient(conn)
 
 	appendEntryRPC := func() (*replogrpc.AppendEntryResponse, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cancel()
-		
+
 		res, err := client.AppendEntryRPC(ctx, req.AppendEntry)
 		if err != nil { return utils.GetZero[*replogrpc.AppendEntryResponse](), err }
 		return res, nil
 	}
-	
+
 	maxRetries := 5
 	expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
 	expBackoff := utils.NewExponentialBackoffStrat[*replogrpc.AppendEntryResponse](expOpts)
-			
+
 	res, err := expBackoff.PerformBackoff(appendEntryRPC)
-	if err != nil { 
+	if err != nil {
 		rlService.Log.Warn("system", sys.Host, "unreachable, setting status to dead")
-		
+
 		sys.SetStatus(system.Dead)
 		rlService.ConnectionPool.CloseConnections(sys.Host)
-		
+
 		return nil, err
 	}
 

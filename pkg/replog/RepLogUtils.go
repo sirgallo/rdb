@@ -1,6 +1,5 @@
 package replog
 
-import "log"
 import "time"
 
 import "github.com/sirgallo/raft/pkg/replogrpc"
@@ -26,7 +25,7 @@ func (rlService *ReplicatedLogService[T]) determineBatchSize() int {
 	existance check on the log for a specific index, ensure that it can exist within range
 */
 
-func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
+func (rlService *ReplicatedLogService[T]) CheckIndex(index int64) bool {
 	logLength := len(rlService.CurrentSystem.Replog)
 	return (index >= 0 && index < int64(logLength))
 }
@@ -39,13 +38,13 @@ func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
 		--> create the rpc request from the Log Entry
 */
 
-func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64, isHeartbeat bool) *replogrpc.AppendEntry {
+func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64, isHeartbeat bool) *replogrpc.AppendEntry {
 	sysHostPtr := &rlService.CurrentSystem.Host
 
 	transformLogEntry := func(logEntry *system.LogEntry[T]) *replogrpc.LogEntry {
 		cmd, err := utils.EncodeStructToString[T](logEntry.Command)
-		if err != nil { log.Println("error encoding log struct to string") }
-		
+		if err != nil { rlService.Log.Debug("error encoding log struct to string") }
+
 		return &replogrpc.LogEntry{
 			Index: logEntry.Index,
 			Term: logEntry.Term,
@@ -58,15 +57,15 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 
 	if isHeartbeat {
 		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-		if lastLogIndex == -1 { 
-			previousLogIndex = utils.GetZero[int64]() 
+		if lastLogIndex == -1 {
+			previousLogIndex = utils.GetZero[int64]()
 		} else { previousLogIndex = lastLogIndex }
-		
+
 		previousLogTerm = lastLogTerm
 		entries = nil
 	} else {
 		if nextIndex == 0 {
-			previousLogIndex = utils.GetZero[int64]() 
+			previousLogIndex = utils.GetZero[int64]()
 			previousLogTerm = utils.GetZero[int64]()
 		} else {
 			previousLog := rlService.CurrentSystem.Replog[nextIndex - 1]
@@ -77,15 +76,15 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 		entriesToSend := func() []*system.LogEntry[T] {
 			batchSize := rlService.determineBatchSize()
 
-			if nextIndex == 0 { 
+			if nextIndex == 0 {
 				if len(rlService.CurrentSystem.Replog) <= batchSize {
-					return rlService.CurrentSystem.Replog 
+					return rlService.CurrentSystem.Replog
 				} else { return rlService.CurrentSystem.Replog[:batchSize] }
 			}
 
-			if len(rlService.CurrentSystem.Replog[nextIndex:]) <= batchSize { 
+			if len(rlService.CurrentSystem.Replog[nextIndex:]) <= batchSize {
 				return rlService.CurrentSystem.Replog[nextIndex:]
-			} else { return rlService.CurrentSystem.Replog[nextIndex:nextIndex + int64(batchSize)] }
+			} else { return rlService.CurrentSystem.Replog[nextIndex : nextIndex+int64(batchSize)] }
 		}()
 
 		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
@@ -106,14 +105,14 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 /*
 	Get Alive Systems And Min Success Resps:
 		helper method for both determining the current alive systems in the cluster and also the minimum successful responses
-		needed for committing logs to the state machine 
+		needed for committing logs to the state machine
 
 		--> minimum is found by floor(total systems / 2) + 1
 */
 
 func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
 	var aliveSystems []*system.System[T]
-	
+
 	rlService.Systems.Range(func(key, value interface{}) bool {
 		sys := value.(*system.System[T])
 		if sys.Status == system.Ready { aliveSystems = append(aliveSystems, sys) }
@@ -134,8 +133,8 @@ func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([
 
 func (rlService *ReplicatedLogService[T]) resetTimer() {
 	if ! rlService.HeartBeatTimer.Stop() {
-    select {
-			case <- rlService.HeartBeatTimer.C:
+		select {
+			case <-rlService.HeartBeatTimer.C:
 			default:
 		}
 	}

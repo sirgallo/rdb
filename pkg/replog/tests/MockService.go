@@ -7,16 +7,15 @@ import "sync"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/system"
-import "github.com/sirgallo/raft/pkg/wal"
-import "github.com/sirgallo/raft/pkg/utils"
+// import "github.com/sirgallo/raft/pkg/wal"
 
 
 func SetupMockReplogService() *replog.ReplicatedLogService[string] {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
-	wal, walErr := wal.NewWAL()
-	if walErr != nil { log.Fatal("unable to create or open WAL")  }
+	// wal, walErr := wal.NewWAL()
+	// if walErr != nil { log.Fatal("unable to create or open WAL")  }
 
 	initLog := []*system.LogEntry[string]{
 		{ Index: 0, Term: 1, Command: "dummy" },
@@ -34,7 +33,7 @@ func SetupMockReplogService() *replog.ReplicatedLogService[string] {
 		Status: system.Ready,
 		State: system.Follower,
 		Replog: initLog,
-		WAL: wal,
+		// WAL: wal,
 	}
 
 	systemsList := []*system.System[string]{
@@ -44,15 +43,11 @@ func SetupMockReplogService() *replog.ReplicatedLogService[string] {
 		{ Host: "4", NextIndex: 4, Status: system.Ready },
 	}
 
-	otherSystems := utils.Filter[*system.System[string]](systemsList, func(sys *system.System[string]) bool { 
-		return sys.Host != hostname
-	})
-
 	connpoolOpts := connpool.ConnectionPoolOpts{ MaxConn: 10 }
 	rlConnPool := connpool.NewConnectionPool(connpoolOpts)
 
 	sysMap := &sync.Map{} 
-	for _, sys := range otherSystems {
+	for _, sys := range systemsList {
 		sysMap.Store(sys.Host, sys)
 	}
 
