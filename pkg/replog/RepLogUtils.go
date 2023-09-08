@@ -63,7 +63,6 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 		} else { previousLogIndex = lastLogIndex }
 		
 		previousLogTerm = lastLogTerm
-
 		entries = nil
 	} else {
 		if nextIndex == 0 {

@@ -81,7 +81,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	
 	if repLogErr != nil { 
-		rlService.Log.Warn("replog err:", repLogErr)
+		rlService.Log.Warn("replog err:", repLogErr.Error())
 		return rlService.generateResponse(lastLogIndex + 1, false), repLogErr 
 	} 
 	

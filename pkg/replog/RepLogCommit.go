@@ -29,7 +29,7 @@ func (rlService *ReplicatedLogService[T]) CommitLogsLeader() error {
 */
 
 func (rlService *ReplicatedLogService[T]) CommitLogsFollower() error {
-	start := rlService.CurrentSystem.LastApplied + 1
+	start := rlService.CurrentSystem.LastApplied + 1 // next to apply after last known applied
 	end := rlService.CurrentSystem.CommitIndex
 
 	logsToBeCommited := rlService.CurrentSystem.Replog[start:end]
