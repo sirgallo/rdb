@@ -173,7 +173,6 @@ func (raft *RaftService[T]) UpdateRepLogOnStartup() (bool, error){
 		
 		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](raft.CurrentSystem.Replog)
 		raft.CurrentSystem.CommitIndex = lastLogIndex
-		raft.CurrentSystem.LastApplied = lastLogIndex
 		raft.CurrentSystem.CurrentTerm = lastLogTerm
 	}
 

@@ -7,7 +7,7 @@ import "os"
 import "github.com/sirgallo/raft/pkg/logger"
 
 
-//=========================================== Leader Election
+//=========================================== Write Ahead Log
 
 
 const SubDirectory = "raft/replog"
