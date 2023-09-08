@@ -28,13 +28,12 @@ func main() {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
-
 	systemsList := []*system.System[keyvalstore.KeyValOp]{
-		{ Host: "raftsrv1", NextIndex: 0 },
-		{ Host: "raftsrv2", NextIndex: 0 },
-		{ Host: "raftsrv3", NextIndex: 0 },
-		{ Host: "raftsrv4", NextIndex: 0 },
-		{ Host: "raftsrv5", NextIndex: 0 },
+		{ Host: "raftsrv1", NextIndex: 0, Status: system.Ready },
+		{ Host: "raftsrv2", NextIndex: 0, Status: system.Ready },
+		{ Host: "raftsrv3", NextIndex: 0, Status: system.Ready },
+		{ Host: "raftsrv4", NextIndex: 0, Status: system.Ready },
+		{ Host: "raftsrv5", NextIndex: 0, Status: system.Ready },
 	}
 
 	otherSystems := utils.Filter[*system.System[keyvalstore.KeyValOp]](systemsList, func(sys *system.System[keyvalstore.KeyValOp]) bool { 
@@ -86,15 +85,17 @@ func main() {
 					log.Complete = false
 				} else { log.Complete = true }
 
+				/*
 				getEntry := keyvalstore.KeyValOp{
 					Action: keyvalstore.GET,
 					Data: keyvalstore.KeyValPair{
 						Key: "hello",
 					},
 				}
+				*/
 
-				kv, _ := kvstore.Ops(getEntry)
-				Log.Debug("key val pair:", kv)
+				// kv, _ := kvstore.Ops(getEntry)
+				// Log.Debug("key val pair:", kv)
 
 				completedLogs = append(completedLogs, log)
 			}

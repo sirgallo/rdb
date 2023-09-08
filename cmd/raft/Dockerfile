@@ -1,6 +1,10 @@
-FROM golang:1.20
+FROM golang:1.20 as dependencies
 
-WORKDIR /usr/src/raft
+FROM dependencies 
+
+ENV HOME /home
+
+WORKDIR $HOME/raft
 
 COPY pkg ./pkg
 COPY generated ./generated

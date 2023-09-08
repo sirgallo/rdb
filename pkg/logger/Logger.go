@@ -7,6 +7,9 @@ import "time"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== Logger
+
+
 func NewCustomLog(name string) *CustomLog {
 	return &CustomLog{
 		Name: name,

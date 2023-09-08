@@ -19,7 +19,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 */
 
 func (rlService *ReplicatedLogService[T]) determineBatchSize() int {
-	return 1000
+	return 10000
 }
 
 /*
@@ -27,7 +27,8 @@ func (rlService *ReplicatedLogService[T]) determineBatchSize() int {
 */
 
 func (rlService *ReplicatedLogService[T]) checkIndex(index int64) bool {
-	return (index >= 0 && index < int64(len(rlService.CurrentSystem.Replog)))
+	logLength := len(rlService.CurrentSystem.Replog)
+	return (index >= 0 && index < int64(logLength))
 }
 
 /*
@@ -53,21 +54,27 @@ func (rlService *ReplicatedLogService[T]) prepareAppendEntryRPC(nextIndex int64,
 	}
 
 	var previousLogIndex, previousLogTerm int64
-
-	if nextIndex == 0 {
-		previousLogIndex = utils.GetZero[int64]() 
-		previousLogTerm = utils.GetZero[int64]()
-	} else {
-		previousLog := rlService.CurrentSystem.Replog[nextIndex - 1]
-		previousLogIndex = previousLog.Index
-		previousLogTerm = previousLog.Term
-	}
-
 	var entries []*replogrpc.LogEntry
 
 	if isHeartbeat {
+		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+		if lastLogIndex == -1 { 
+			previousLogIndex = utils.GetZero[int64]() 
+		} else { previousLogIndex = lastLogIndex }
+		
+		previousLogTerm = lastLogTerm
+
 		entries = nil
 	} else {
+		if nextIndex == 0 {
+			previousLogIndex = utils.GetZero[int64]() 
+			previousLogTerm = utils.GetZero[int64]()
+		} else {
+			previousLog := rlService.CurrentSystem.Replog[nextIndex - 1]
+			previousLogIndex = previousLog.Index
+			previousLogTerm = previousLog.Term
+		}
+
 		entriesToSend := func() []*system.LogEntry[T] {
 			batchSize := rlService.determineBatchSize()
 
@@ -109,7 +116,9 @@ func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([
 	var aliveSystems []*system.System[T]
 	
 	rlService.Systems.Range(func(key, value interface{}) bool {
-		aliveSystems = append(aliveSystems, value.(*system.System[T]))
+		sys := value.(*system.System[T])
+		if sys.Status == system.Ready { aliveSystems = append(aliveSystems, sys) }
+
 		return true
 	})
 

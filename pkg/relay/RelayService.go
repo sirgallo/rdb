@@ -50,7 +50,7 @@ func (rService *RelayService[T]) StartRelayService(listener *net.Listener) {
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil { rService.Log.Error("Failed to serve:", err) }
+		if err != nil { rService.Log.Error("Failed to serve:", err.Error()) }
 	}()
 
 	rService.RelayListener()
@@ -108,7 +108,7 @@ func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse,
 
 	conn, connErr := rService.ConnectionPool.GetConnection(leader, rService.Port)
 	if connErr != nil { 
-		rService.Log.Error("Failed to connect to", leader + rService.Port, ":", connErr) 
+		rService.Log.Error("Failed to connect to", leader + rService.Port, ":", connErr.Error()) 
 		return nil, connErr
 	}
 
@@ -134,8 +134,11 @@ func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse,
 			
 	res, err := expBackoff.PerformBackoff(relayRPC)
 	if err != nil { 
-		rService.Log.Warn("system", leader, "unreachable, removing from registered systems.")
-		rService.Systems.Delete(leader)
+		rService.Log.Warn("system", leader, "unreachable, setting status to dead")
+
+		sys, ok := rService.Systems.Load(leader)
+		if ok { sys.(*system.System[T]).SetStatus(system.Dead) }
+
 		rService.ConnectionPool.CloseConnections(leader)
 		
 		return nil, err
@@ -156,12 +159,20 @@ func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse,
 */
 
 func (rService *RelayService[T]) RelayRPC(ctx context.Context, req *relayrpc.RelayRequest) (*relayrpc.RelayResponse, error) {
-	sys := &system.System[T]{
-		Host: req.Host,
-		NextIndex: 0,
-	}
+	s, ok := rService.Systems.Load(req.Host)
+	if ! ok { 
+		sys := &system.System[T]{
+			Host: req.Host,
+			Status: system.Ready,
+		}
 
-	rService.Systems.LoadOrStore(sys.Host, sys)
+		rService.Systems.Store(sys.Host, sys)
+	} else {
+		sys := s.(*system.System[T])
+		if sys.Status == system.Dead { 
+			sys.SetStatus(system.Ready)
+		}
+	}
 
 	cmd, decErr := utils.DecodeStringToStruct[T](req.Command)
 	if decErr != nil { 

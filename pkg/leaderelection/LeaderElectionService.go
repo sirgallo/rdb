@@ -50,7 +50,7 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil { leService.Log.Error("Failed to serve:", err) }
+		if err != nil { leService.Log.Error("Failed to serve:", err.Error()) }
 	}()
 
 	leService.StartElectionTimeout()

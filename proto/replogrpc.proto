@@ -25,6 +25,6 @@ message AppendEntry {
 
 message AppendEntryResponse {
   int64 Term = 1;
-  int64 LatestLogIndex = 2;
+  int64 NextLogIndex = 2;
   bool Success = 3;
 }

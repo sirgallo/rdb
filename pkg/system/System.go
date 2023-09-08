@@ -85,6 +85,28 @@ func (sys *System[T]) SetCurrentLeader(leaderId string) bool {
 }
 
 /*
+	Set Current Leader:
+		1.) update the current leader id if not already
+*/
+
+func (sys *System[T]) SetStatus(status SystemStatus) bool {
+	sys.SystemMutex.Lock()
+	defer sys.SystemMutex.Unlock()
+
+	switch status {
+		case Dead:
+			sys.Status = Dead
+		case Ready:
+			sys.Status = Ready
+		case Busy:
+			sys.Status = Busy
+		default:
+	}
+
+	return true
+}
+
+/*
 	Update Next Index:
 		1.) update the next log index to send for a particular system
 */

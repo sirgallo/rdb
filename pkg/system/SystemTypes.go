@@ -2,6 +2,8 @@ package system
 
 import "sync"
 
+import "github.com/sirgallo/raft/pkg/wal"
+
 
 type SystemState string
 type SystemStatus int
@@ -25,6 +27,7 @@ type System [T MachineCommands] struct {
 	CurrentLeader string
 
 	Replog []*LogEntry[T]
+	WAL *wal.WAL
 
 	NextIndex int64 // next index to send to a server
 
@@ -44,5 +47,6 @@ const (
 
 const (
 	Dead SystemStatus = 0
-	Alive SystemStatus = 1
+	Ready SystemStatus = 1
+	Busy SystemStatus = 2
 )

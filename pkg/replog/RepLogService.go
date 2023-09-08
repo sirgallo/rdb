@@ -30,11 +30,8 @@ func NewReplicatedLogService [T system.MachineCommands](opts *ReplicatedLogOpts[
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
+		SyncLogChannel: make(chan string),
 		Log: *clog.NewCustomLog(NAME),
-	}
-
-	for _, sys := range opts.SystemsList {
-		rlService.Systems.Store(sys.Host, sys)
 	}
 
 	return rlService
@@ -54,7 +51,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil { rlService.Log.Error("Failed to serve:", err) }
+		if err != nil { rlService.Log.Error("Failed to serve:", err.Error()) }
 	}()
 
 	rlService.StartReplicatedLogTimeout()
@@ -63,10 +60,17 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 /*
 	start the log timeouts:
 		separate go routines:
-			1.) replicated log
+			1.) heartbeat timeout
+				--> wait for timer to drain, signal heartbeat, and reset timer
+			2.) replicated log
 				--> if a new log is signalled for append to the log, replicate the log to followers
-			2.) heartbeat timeout
+			3.) heartbeat
 				--> on a set interval, heartbeat all of the followers in the cluster if leader
+			4.) sync logs
+				--> for systems with inconsistent replicated logs, start a separate go routine to sync
+					them back up to the leader
+			5.) write stream 
+				--> start write stream to append new committed logs to the WAL
 */
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
@@ -109,6 +113,15 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 				}
 		}
 	}()
+
+	go func() {
+		for {
+			host :=<- rlService.SyncLogChannel
+			go rlService.SyncLogs(host)
+		}
+	}()
+
+	rlService.CurrentSystem.WAL.StartWriteStream()
 }
 
 func (rlService *ReplicatedLogService[T]) attemptResetTimeout() {

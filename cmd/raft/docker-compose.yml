@@ -13,6 +13,8 @@ services:
       - 54321
       - 54322
       - 54323
+    volumes:
+      - $HOME/raftsrv1:/home/raft/replog
   raftsrv2:
     image: raftsrv2_img
     container_name: raftsrv2_cont
@@ -26,6 +28,8 @@ services:
       - 54321
       - 54322
       - 54323
+    volumes:
+      - $HOME/raftsrv2:/home/raft/replog
   raftsrv3:
     image: raftsrv3_img
     container_name: raftsrv3_cont
@@ -39,6 +43,8 @@ services:
       - 54321
       - 54322
       - 54323
+    volumes:
+      - $HOME/raftsrv3:/home/raft/replog
   raftsrv4:
     image: raftsrv4_img
     container_name: raftsrv4_cont
@@ -52,6 +58,8 @@ services:
       - 54321
       - 54322
       - 54323
+    volumes:
+      - $HOME/raftsrv4:/home/raft/replog
   raftsrv5:
     image: raftsrv5_img
     container_name: raftsrv5_cont
@@ -65,6 +73,8 @@ services:
       - 54321
       - 54322
       - 54323
+    volumes:
+      - $HOME/raftsrv5:/home/raft/replog
 networks:
   raft_api_network:
     driver: bridge

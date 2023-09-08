@@ -36,9 +36,10 @@ func initTimeoutOnStartup() time.Duration {
 
 func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*system.System[T], int64) {
 	var aliveSystems []*system.System[T]
-	
+
 	leService.Systems.Range(func(key, value interface{}) bool {
-		aliveSystems = append(aliveSystems, value.(*system.System[T]))
+		sys := value.(*system.System[T])
+		if sys.Status != system.Dead { aliveSystems = append(aliveSystems, sys) }
 		return true
 	})
 

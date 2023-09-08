@@ -11,18 +11,15 @@ import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/relay"
 import "github.com/sirgallo/raft/pkg/system"
+import "github.com/sirgallo/raft/pkg/wal"
 
 
 //=========================================== Raft Service
 
 
 /*
-	initialize both the leader election module and the replicated log module under the same raft service
-	and link together
-
-	initialize the state machine operations/state machine dependency
+	initialize sub modules under the same raft service and link together
 */
-
 
 const NAME = "Raft"
 var Log = clog.NewCustomLog(NAME)
@@ -31,12 +28,17 @@ func NewRaftService [T system.MachineCommands](opts RaftServiceOpts[T]) *RaftSer
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
+	wal, walErr := wal.NewWAL()
+	if walErr != nil { log.Fatal("unable to create or open WAL")  }
+
 	currentSystem := &system.System[T]{
 		Host: hostname,
 		CurrentTerm: 0,
-		CommitIndex: 0,
-		LastApplied: 0,
+		CommitIndex: -1,
+		LastApplied: -1,
+		Status: system.Ready,
 		Replog: []*system.LogEntry[T]{},
+		WAL: wal,
 	}
 
 	raft := &RaftService[T]{
@@ -45,6 +47,9 @@ func NewRaftService [T system.MachineCommands](opts RaftServiceOpts[T]) *RaftSer
 		CurrentSystem: currentSystem,
 		CommandChannel: make(chan T, 100000),
 	}
+
+	_, updateErr := raft.UpdateRepLogOnStartup()
+	if updateErr != nil { Log.Error("error on log replication:", updateErr.Error())}
 
 	for _, sys := range opts.SystemsList {
 		raft.Systems.Store(sys.Host, sys)
@@ -88,19 +93,30 @@ func NewRaftService [T system.MachineCommands](opts RaftServiceOpts[T]) *RaftSer
 
 /*
 	Start Raft Service:
-		start both the leader election and replicated log modules.
-		initialize the state machine dependency and link to the replicated log module for log commits
+		start all sub modules and create go routines to link appropriate channels
+		
+		go routine 1:
+			on acknowledged signal from rep log module, attempt reset timeout on
+			leader election module
+		go routine 2:
+			on signal from successful leader election, force heartbeat on log module
+		go routine 3:
+			on relay from follower, pass new command to leader to be appended to log
+		go routine 4:
+			on command channel for new commands from client, determine whether or not
+			to pass to rep log module to be appended if leader, otherwise relay from
+			follower to current leader
 */
 
 func (raft *RaftService[T]) StartRaftService() {
 	leListener, leErr := net.Listen(raft.Protocol, raft.LeaderElection.Port)
-	if leErr != nil { Log.Error("Failed to listen: %v", leErr) }
+	if leErr != nil { Log.Error("Failed to listen: %v", leErr.Error()) }
 
 	rlListener, rlErr := net.Listen(raft.Protocol, raft.ReplicatedLog.Port)
-	if rlErr != nil { Log.Error("Failed to listen: %v", rlErr) }
+	if rlErr != nil { Log.Error("Failed to listen: %v", rlErr.Error()) }
 
 	rListener, rErr := net.Listen(raft.Protocol, raft.Relay.Port)
-	if rErr != nil { Log.Error("Failed to listen: %v", rErr) }
+	if rErr != nil { Log.Error("Failed to listen: %v", rErr.Error()) }
 
 	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)
 	go raft.LeaderElection.StartLeaderElectionService(&leListener)
@@ -137,4 +153,34 @@ func (raft *RaftService[T]) StartRaftService() {
 	}()
 	
 	select{}
+}
+
+/*
+	Update RepLog On Startup:
+		on system startup or restart replay the WAL to sync replicated log to end of WAL
+			1.) sync WAL to replog
+			2.) update commit index to last log index from synced WAL --> WAL only contains committed logs
+			3.) update current term to term of last log
+*/
+
+func (raft *RaftService[T]) UpdateRepLogOnStartup() (bool, error){
+	logs, replayErr := raft.CurrentSystem.ReplayLogsOnStart()
+
+	if replayErr != nil {
+		return false, replayErr
+	} else if len(logs) > 0 { 
+		raft.CurrentSystem.Replog = logs
+		
+		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](raft.CurrentSystem.Replog)
+		raft.CurrentSystem.CommitIndex = lastLogIndex
+		raft.CurrentSystem.LastApplied = lastLogIndex
+		raft.CurrentSystem.CurrentTerm = lastLogTerm
+	}
+
+	Log.Debug("on startup rep log length:", len(raft.CurrentSystem.Replog))
+	if len(raft.CurrentSystem.Replog) > 0 {
+		Log.Debug("on startup first and last", raft.CurrentSystem.Replog[0], raft.CurrentSystem.Replog[len(raft.CurrentSystem.Replog) - 1])
+	}
+
+	return true, nil
 }

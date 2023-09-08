@@ -9,14 +9,13 @@ import "github.com/sirgallo/raft/pkg/utils"
 //=========================================== RepLog Commit
 
 
-// NOTE: Incomplete, TODO
-
 /*
 	Commit Logs Leader 
 */
 
 func (rlService *ReplicatedLogService[T]) CommitLogsLeader() error {
-	logsToBeCommited := rlService.CurrentSystem.Replog[rlService.CurrentSystem.CommitIndex:]
+	nextToCommit := rlService.CurrentSystem.CommitIndex + 1
+	logsToBeCommited := rlService.CurrentSystem.Replog[nextToCommit:]
 	commitErr := rlService.commitLogs(logsToBeCommited)
 	
 	rlService.CurrentSystem.CommitIndex = rlService.CurrentSystem.LastApplied
@@ -30,7 +29,7 @@ func (rlService *ReplicatedLogService[T]) CommitLogsLeader() error {
 */
 
 func (rlService *ReplicatedLogService[T]) CommitLogsFollower() error {
-	start := rlService.CurrentSystem.LastApplied
+	start := rlService.CurrentSystem.LastApplied + 1
 	end := rlService.CurrentSystem.CommitIndex
 
 	logsToBeCommited := rlService.CurrentSystem.Replog[start:end]

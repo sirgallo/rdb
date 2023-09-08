@@ -57,7 +57,7 @@ func Filter [T comparable](array []T, condition func(T) bool) []T {
 	apply the transformer and return an array of type V, or all of the transformed elements
 */
 
-func Map [T comparable, V comparable](array []T, transform func(T) V) []V {
+func Map [T any, V any](array []T, transform func(T) V) []V {
 	var mapped []V
 	for _, elem := range array {
 		mapped = append(mapped, transform(elem))

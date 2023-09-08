@@ -44,6 +44,14 @@ func (leService *LeaderElectionService[T]) Election() {
 				case <- *leRespChans.BroadcastClose:
 					if votesGranted >= int64(minimumVotes) {
 						leService.CurrentSystem.TransitionToLeader()
+						lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+						leService.Systems.Range(func(key, value any) bool {
+							sys := value.(*system.System[T])
+							sys.UpdateNextIndex(lastLogIndex)
+							
+							return true
+						})
+
 						leService.HeartbeatOnElection <- true
 					} else {
 						leService.Log.Warn("min successful votes not received...")
@@ -107,7 +115,7 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 			
 			conn, connErr := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
 			if connErr != nil { 
-				leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr) 
+				leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr.Error()) 
 				return
 			}
 
@@ -117,7 +125,7 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 					return
 				default:
 					conn, connErr := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
-					if connErr != nil { leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr) }
+					if connErr != nil { leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr.Error()) }
 
 					client := lerpc.NewLeaderElectionServiceClient(conn)
 
@@ -136,9 +144,11 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 
 					res, err := expBackoff.PerformBackoff(requestVoteRPC)
 					if err != nil { 
-						leService.Log.Warn("system", sys.Host, "unreachable")
-						leService.Systems.Delete(sys.Host)
+						leService.Log.Warn("system", sys.Host, "unreachable, setting status to dead")
+
+						sys.SetStatus(system.Dead)
 						leService.ConnectionPool.CloseConnections(sys.Host)
+						
 						return 
 					}
 
@@ -173,12 +183,18 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 */
 
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
-	sys := &system.System[T]{
-		Host: req.CandidateId,
-		NextIndex: 0,
-	}
+	s, ok := leService.Systems.Load(req.CandidateId)
+	if ! ok { 
+		sys := &system.System[T]{
+			Host: req.CandidateId,
+			Status: system.Ready,
+		}
 
-	leService.Systems.LoadOrStore(sys.Host, sys)
+		leService.Systems.Store(sys.Host, sys)
+	} else {
+		sys := s.(*system.System[T])
+		sys.SetStatus(system.Ready)
+	}
 
 	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
 
