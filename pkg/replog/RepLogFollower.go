@@ -25,9 +25,10 @@ import "github.com/sirgallo/raft/pkg/utils"
 			6.) for all of the entries of the incoming request
 				--> if the term of the replicated log associated with the index of the incoming entry is not the same
 					as the request, remove up to the entry in the log on the system and begin appending logs
-				--> otherwise, just append the incoming entries
-			7.) if the commit index of the incoming request is higher than on the system, commit logs up to the commit index
-				for the state machine on the system and apply logs from last applied up to commit index to the WAL
+				--> otherwise, just append the incoming entries to in memory log and WAL, since we can consider the log 
+					committed on the follower
+			7.) if the commit index of the incoming request is higher than on the system, commit logs up to the commit index from
+					last applied for the state machine on the system
 			8.) if logs are at least up to date with the leader's commit index: 
 				--> return a success response with the index of the latest log applied to the replicated log
 					else:
