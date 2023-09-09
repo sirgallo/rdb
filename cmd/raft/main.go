@@ -13,12 +13,6 @@ import "github.com/sirgallo/raft/pkg/utils"
 import "github.com/sirgallo/raft/generated/keyvalstore"
 
 
-type CommandEntry struct {
-	Action string
-	Data string
-}
-
-
 const NAME = "Main"
 var Log = clog.NewCustomLog(NAME)
 
