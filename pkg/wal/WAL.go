@@ -16,6 +16,7 @@ const FileName = "replog.wal"
 const NAME = "WAL"
 var Log = clog.NewCustomLog(NAME)
 
+
 func NewWAL() (*WAL, error) {
 	homedir, homeErr := os.UserHomeDir()
 	if homeErr != nil { return nil, homeErr }
@@ -83,7 +84,7 @@ func (wal *WAL) Replay() ([][]byte, error) {
 	if readErr != nil { return nil, readErr }
 
 	lines := bytes.Split(content, []byte{'\n'})
-
+	
 	return lines[:len(lines) - 1], nil	// remove null line at end
 }
 

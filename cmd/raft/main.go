@@ -8,7 +8,6 @@ import "time"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/service"
 import "github.com/sirgallo/raft/pkg/logger"
-import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 import "github.com/sirgallo/raft/generated/keyvalstore"
@@ -36,9 +35,8 @@ func main() {
 		{ Host: "raftsrv5", NextIndex: 0, Status: system.Ready },
 	}
 
-	otherSystems := utils.Filter[*system.System[keyvalstore.KeyValOp]](systemsList, func(sys *system.System[keyvalstore.KeyValOp]) bool { 
-		return sys.Host != hostname
-	})
+	sysFilter := func(sys *system.System[keyvalstore.KeyValOp]) bool { return sys.Host != hostname }
+	otherSystems := utils.Filter[*system.System[keyvalstore.KeyValOp]](systemsList, sysFilter)
 
 	raftOpts := service.RaftServiceOpts[keyvalstore.KeyValOp]{
 		Protocol: "tcp",
@@ -52,11 +50,11 @@ func main() {
 	}
 
 	raft := service.NewRaftService[keyvalstore.KeyValOp](raftOpts)
-
 	kvstore := keyvalstore.NewKeyValStore()
 
 	go raft.StartRaftService()
 
+	// simulate a client creating new commands to be applied to the state machine
 	go func() {
 		for {
 			cmdEntry := &keyvalstore.KeyValOp{
@@ -77,30 +75,9 @@ func main() {
 
 	go func() {
 		for {
-			logs :=<- raft.ReplicatedLog.LogCommitChannel
-			completedLogs := []replog.LogCommitChannelEntry[keyvalstore.KeyValOp]{}
-			for _, log := range logs {
-				_, kvErr := kvstore.Ops(log.LogEntry.Command)
-				if kvErr != nil { 
-					log.Complete = false
-				} else { log.Complete = true }
-
-				/*
-				getEntry := keyvalstore.KeyValOp{
-					Action: keyvalstore.GET,
-					Data: keyvalstore.KeyValPair{
-						Key: "hello",
-					},
-				}
-				*/
-
-				// kv, _ := kvstore.Ops(getEntry)
-				// Log.Debug("key val pair:", kv)
-
-				completedLogs = append(completedLogs, log)
-			}
-			
-			raft.ReplicatedLog.LogCommitChannel <- completedLogs
+			logToApply :=<- raft.StateMachineLogApplyChan
+			_, kvErr := kvstore.Ops(logToApply.LogEntry.Command)
+			raft.StateMachineLogAppliedChan <- kvErr
 		}
 	}()
 	

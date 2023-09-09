@@ -13,6 +13,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 //=========================================== RepLog Leader
 
+
 /*
 	Heartbeat:
 		for all systems in the System Map, send an empty AppendEntryRPC
@@ -122,13 +123,16 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 						rlService.Log.Info("at least minimum successful responses received:", successfulResps)
 						rlService.Log.Info("committing logs to state machine and appending to write ahead log")
 
-						rlService.CommitLogsLeader()
-
 						logAsBytes, encErr := system.TransformLogEntryToBytes[T](newLog)
 						if encErr != nil { rlService.Log.Error("write err:", encErr.Error()) }
 
 						rlService.CurrentSystem.WAL.WriteStream <- logAsBytes
+
+						rlService.CurrentSystem.CommitIndex++
+						applyErr := rlService.ApplyLogs()
+						if applyErr != nil { rlService.Log.Error("error applying command to state machine:", applyErr) }
 					} else { rlService.Log.Warn("minimum successful responses not received.") }
+					
 					return
 				case <- *rlRespChans.SuccessChan:
 					atomic.AddInt64(&successfulResps, 1)

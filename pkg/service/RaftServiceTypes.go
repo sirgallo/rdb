@@ -34,6 +34,8 @@ type RaftService [T system.MachineCommands] struct {
 	Relay *relay.RelayService[T]
 
 	CommandChannel chan T
+	StateMachineLogApplyChan chan replog.LogCommitChannelEntry[T]
+	StateMachineLogAppliedChan chan error
 
 	// Volatile State
 	CommitIndex int64

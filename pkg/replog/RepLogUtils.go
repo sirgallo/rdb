@@ -57,34 +57,34 @@ func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64,
 
 	if isHeartbeat {
 		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-		if lastLogIndex == -1 {
-			previousLogIndex = utils.GetZero[int64]()
-		} else { previousLogIndex = lastLogIndex }
+		if lastLogIndex >= 0 {
+			previousLogIndex = lastLogIndex
+		} else { previousLogIndex = utils.GetZero[int64]() }
 
 		previousLogTerm = lastLogTerm
 		entries = nil
 	} else {
-		if nextIndex == 0 {
-			previousLogIndex = utils.GetZero[int64]()
-			previousLogTerm = utils.GetZero[int64]()
-		} else {
+		if nextIndex > 0 {
 			previousLog := rlService.CurrentSystem.Replog[nextIndex - 1]
 			previousLogIndex = previousLog.Index
 			previousLogTerm = previousLog.Term
+		} else {
+			previousLogIndex = utils.GetZero[int64]()
+			previousLogTerm = utils.GetZero[int64]()
 		}
 
 		entriesToSend := func() []*system.LogEntry[T] {
 			batchSize := rlService.determineBatchSize()
 
-			if nextIndex == 0 {
-				if len(rlService.CurrentSystem.Replog) <= batchSize {
-					return rlService.CurrentSystem.Replog
-				} else { return rlService.CurrentSystem.Replog[:batchSize] }
+			if nextIndex > 0 {
+				if len(rlService.CurrentSystem.Replog[nextIndex:]) <= batchSize {
+					return rlService.CurrentSystem.Replog[nextIndex:]
+				} else { return rlService.CurrentSystem.Replog[nextIndex : nextIndex+int64(batchSize)] }
 			}
 
-			if len(rlService.CurrentSystem.Replog[nextIndex:]) <= batchSize {
-				return rlService.CurrentSystem.Replog[nextIndex:]
-			} else { return rlService.CurrentSystem.Replog[nextIndex : nextIndex+int64(batchSize)] }
+			if len(rlService.CurrentSystem.Replog) <= batchSize {
+				return rlService.CurrentSystem.Replog
+			} else { return rlService.CurrentSystem.Replog[:batchSize] }
 		}()
 
 		entries = utils.Map[*system.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)

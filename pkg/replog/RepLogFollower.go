@@ -9,6 +9,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 //=========================================== RepLog Follower
 
+
 /*
 	AppendEntryRPC:
 		grpc server implementation
@@ -53,13 +54,13 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	failedNextIndex := func() int64 {
 		replogLength := len(rlService.CurrentSystem.Replog)
 		if replogLength == 0 || req.PrevLogIndex - 1 < 0 { return 0 }
-
 		return req.PrevLogIndex - 1
 	}()
 
 	handleReqTerm := func() bool { return req.Term >= rlService.CurrentSystem.CurrentTerm }
 	handleReqValidTermAtIndex := func() bool {
-		if len(rlService.CurrentSystem.Replog) == 0 || req.Entries == nil { return true } // special case for when a system has empty replicated log or hearbeats where we don't check
+		// special case for when a system has empty replicated log or hearbeats where we don't check
+		if len(rlService.CurrentSystem.Replog) == 0 || req.Entries == nil { return true }
 		return rlService.CheckIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term == req.PrevLogTerm
 	}
 
@@ -79,7 +80,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	_, repLogErr := rlService.HandleReplicateLogs(req)
 	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
 	nextLogIndex := lastLogIndex + 1
-	
+
 	if repLogErr != nil {
 		rlService.Log.Warn("replog err:", repLogErr.Error())
 		return rlService.generateResponse(nextLogIndex, false), repLogErr
@@ -149,11 +150,11 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 	if rlService.CheckIndex(req.LeaderCommitIndex) {
 		if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {
 			lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
-			minCommitIndex := min(req.LeaderCommitIndex, lastLogIndex) + 1
+			minCommitIndex := min(req.LeaderCommitIndex, lastLogIndex)
 
 			rlService.CurrentSystem.CommitIndex = minCommitIndex
-			commitErr := rlService.CommitLogsFollower()
-			if commitErr != nil { return false, commitErr }
+			applyErr := rlService.ApplyLogs()
+			if applyErr != nil { return false, applyErr }
 		}
 	}
 

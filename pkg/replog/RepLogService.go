@@ -28,7 +28,7 @@ func NewReplicatedLogService [T system.MachineCommands](opts *ReplicatedLogOpts[
 		Systems: opts.Systems,
 		AppendLogSignal: make(chan T, 100000),
 		LeaderAcknowledgedSignal: make(chan bool),
-		LogCommitChannel: make(chan []LogCommitChannelEntry[T]),
+		LogApplyChan: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
 		Log: *clog.NewCustomLog(NAME),
@@ -110,7 +110,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 						rlService.Log.Info("sending heartbeats after election...")
 						rlService.Heartbeat()
 					}
-				}
+			}
 		}
 	}()
 

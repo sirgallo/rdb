@@ -37,7 +37,7 @@ type ReplicatedLogService [T system.MachineCommands] struct {
 	// Module Specific
 	AppendLogSignal chan T
 	LeaderAcknowledgedSignal chan bool
-	LogCommitChannel chan []LogCommitChannelEntry[T]
+	LogApplyChan chan []LogCommitChannelEntry[T]
 	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
 	SyncLogChannel chan string
