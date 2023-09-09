@@ -46,7 +46,7 @@ func (cLog *CustomLog) Warn(msg ...interface{}) {
 
 func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 	currTime := time.Now()
-	formattedTime := currTime.Format("2006-01-02 15:04:05.000")
+	formattedTime := currTime.Format(TimeFormat)
 
 	encodedMsg := func() string {
 		encodeTransform := func(chunk interface{}) string {

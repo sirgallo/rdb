@@ -13,9 +13,6 @@ import "github.com/sirgallo/raft/pkg/utils"
 //=========================================== RepLog Service
 
 
-const NAME = "Replicated Log"
-
-
 /*
 	create a new service instance with passable options
 */
@@ -26,7 +23,7 @@ func NewReplicatedLogService [T system.MachineCommands](opts *ReplicatedLogOpts[
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		AppendLogSignal: make(chan T, 100000),
+		AppendLogSignal: make(chan T, AppendLogBuffSize),
 		LeaderAcknowledgedSignal: make(chan bool),
 		LogApplyChan: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
@@ -74,7 +71,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 */
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
-	rlService.HeartBeatTimer = time.NewTimer(HeartbeatIntervalInMs * time.Millisecond)
+	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
 	timeoutChan := make(chan bool)
 	
 	go func() {

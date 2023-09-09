@@ -3,7 +3,6 @@ package relay
 import "context"
 import "errors"
 import "net"
-import "time"
 
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/relayrpc"
@@ -13,9 +12,6 @@ import "google.golang.org/grpc"
 
 
 //=========================================== Relay Service
-
-
-const NAME = "Relay"
 
 
 /*
@@ -28,7 +24,7 @@ func NewRelayService [T system.MachineCommands](opts *RelayOpts[T]) *RelayServic
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		RelayChannel: make(chan T, 100000),
+		RelayChannel: make(chan T, RelayChannelBuffSize),
 		RelayedAppendLogSignal: make(chan T),
 		Log: *clog.NewCustomLog(NAME),
 	}
@@ -63,7 +59,7 @@ func (rService *RelayService[T]) StartRelayService(listener *net.Listener) {
 */
 
 func (rService *RelayService[T]) RelayListener() {
-	failedBuffer := make(chan T, 1000)
+	failedBuffer := make(chan T, FailedBuffSize)
 	
 	go func() {
 		cmd :=<- failedBuffer
@@ -115,7 +111,7 @@ func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse,
 	client := relayrpc.NewRelayServiceClient(conn)
 
 	relayRPC := func() (*relayrpc.RelayResponse, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
 		defer cancel()
 		
 		res, err := client.RelayRPC(ctx, relayReq)

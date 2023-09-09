@@ -3,7 +3,6 @@ package leaderelection
 import "context"
 import "sync"
 import "sync/atomic"
-import "time"
 
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -125,12 +124,12 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 					return
 				default:
 					conn, connErr := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
-					if connErr != nil { leService.Log.Error("Failed to connect to", sys.Host + leService.Port, "-->", connErr.Error()) }
+					if connErr != nil { leService.Log.Error("Failed to connect to", sys.Host + leService.Port, ":", connErr.Error()) }
 
 					client := lerpc.NewLeaderElectionServiceClient(conn)
 
 					requestVoteRPC := func() (*lerpc.RequestVoteResponse, error) {
-						ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Millisecond)
+						ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
 						defer cancel()
 
 						res, err := client.RequestVoteRPC(ctx, request)

@@ -13,9 +13,6 @@ import "google.golang.org/grpc"
 //=========================================== Leader Election Service
 
 
-const NAME = "Leader Election"
-
-
 /*
 	create a new service instance with passable options
 	--> initialize state to Follower and initialize a random timeout period for leader election

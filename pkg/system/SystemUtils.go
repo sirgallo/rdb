@@ -4,7 +4,9 @@ import "strings"
 
 import "github.com/sirgallo/raft/pkg/utils"
 
+
 //=========================================== System Utils
+
 
 /*
 	Determine Last Log Idx And Term:
@@ -25,8 +27,8 @@ func DetermineLastLogIdxAndTerm [T MachineCommands](replog []*LogEntry[T]) (int6
 		lastLogIndex = lastLog.Index
 		lastLogTerm = lastLog.Term
 	} else {
-		lastLogIndex = -1 // -1 symbolizes empty log
-		lastLogTerm = 0
+		lastLogIndex = DefaultLastLogIndex // -1 symbolizes empty log
+		lastLogTerm = DefaultLastLogTerm
 	}
 
 	return lastLogIndex, lastLogTerm
@@ -38,6 +40,7 @@ func DetermineLastLogIdxAndTerm [T MachineCommands](replog []*LogEntry[T]) (int6
 			1.) transform from logs from byte array to log entry
 			2.) return logs
 */
+
 func (system *System[T]) ReplayLogsOnStart() ([]*LogEntry[T], error) {
 	logsAsBytes, replayErr := system.WAL.Replay()
 	if replayErr != nil { return nil, replayErr }

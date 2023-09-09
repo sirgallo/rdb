@@ -43,7 +43,7 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 	completedLogs := <- rlService.LogApplyChan
 
 	for _, completeLog := range completedLogs {
-		if !completeLog.Complete {
+		if ! completeLog.Complete {
 			rlService.Log.Debug("incomplete log", completeLog)
 			return errors.New("incomplete commit of logs")
 		} else { rlService.CurrentSystem.LastApplied = int64(completeLog.LogEntry.Index) }

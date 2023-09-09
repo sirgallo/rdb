@@ -41,3 +41,8 @@ type RaftService [T system.MachineCommands] struct {
 	CommitIndex int64
 	LastApplied int64
 }
+
+
+const DefaultCommitIndex = -1
+const DefaultLastApplied = -1
+const CommandChannelBuffSize = 100000

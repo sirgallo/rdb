@@ -48,3 +48,7 @@ type LEResponseChannels struct {
 	VotesChan *chan int
 	HigherTermDiscovered *chan int64
 }
+
+
+const NAME = "Leader Election"
+const RPCTimeout = 30 * time.Millisecond

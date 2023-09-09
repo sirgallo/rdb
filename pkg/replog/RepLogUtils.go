@@ -1,13 +1,12 @@
 package replog
 
-import "time"
-
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== RepLog Utils
+
 
 /*
 	Determine Batch Size:
@@ -139,5 +138,5 @@ func (rlService *ReplicatedLogService[T]) resetTimer() {
 		}
 	}
 
-	rlService.HeartBeatTimer.Reset(HeartbeatIntervalInMs * time.Millisecond)
+	rlService.HeartBeatTimer.Reset(HeartbeatInterval)
 }

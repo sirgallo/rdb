@@ -1,6 +1,7 @@
 package relay
 
 import "sync"
+import "time"
 
 import "github.com/sirgallo/raft/pkg/relayrpc"
 import "github.com/sirgallo/raft/pkg/logger"
@@ -32,3 +33,9 @@ type RelayService [T system.MachineCommands] struct {
 
 	Log clog.CustomLog
 }
+
+
+const NAME = "Relay"
+const RPCTimeout = 30 * time.Millisecond
+const RelayChannelBuffSize = 100000
+const FailedBuffSize = 1000

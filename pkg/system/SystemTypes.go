@@ -50,3 +50,6 @@ const (
 	Ready SystemStatus = 1
 	Busy SystemStatus = 2
 )
+
+const DefaultLastLogIndex = -1 // -1 symbolizes empty log
+const DefaultLastLogTerm = 0

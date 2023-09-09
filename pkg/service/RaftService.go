@@ -35,8 +35,8 @@ func NewRaftService[T system.MachineCommands](opts RaftServiceOpts[T]) *RaftServ
 	currentSystem := &system.System[T]{
 		Host: hostname,
 		CurrentTerm: 0,
-		CommitIndex: -1,
-		LastApplied: -1,
+		CommitIndex: DefaultCommitIndex,
+		LastApplied: DefaultLastApplied,
 		Status: system.Ready,
 		Replog: []*system.LogEntry[T]{},
 		WAL: wal,
@@ -46,12 +46,15 @@ func NewRaftService[T system.MachineCommands](opts RaftServiceOpts[T]) *RaftServ
 		Protocol: opts.Protocol,
 		Systems: &sync.Map{},
 		CurrentSystem: currentSystem,
-		CommandChannel: make(chan T, 100000),
+		CommandChannel: make(chan T, CommandChannelBuffSize),
 		StateMachineLogApplyChan: make(chan replog.LogCommitChannelEntry[T]),
 		StateMachineLogAppliedChan: make(chan error),
 	}
 
 	for _, sys := range opts.SystemsList {
+		sys.UpdateNextIndex(0)
+		sys.SetStatus(system.Ready)
+		
 		raft.Systems.Store(sys.Host, sys)
 	}
 

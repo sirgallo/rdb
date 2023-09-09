@@ -3,7 +3,6 @@ package replog
 import "context"
 import "sync"
 import "sync/atomic"
-import "time"
 import "google.golang.org/grpc"
 
 import "github.com/sirgallo/raft/pkg/replogrpc"
@@ -195,7 +194,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 
 			conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
 			if connErr != nil {
-				rlService.Log.Error("Failed to connect to", sys.Host+rlService.Port, ":", connErr.Error())
+				rlService.Log.Error("Failed to connect to", sys.Host + rlService.Port, ":", connErr.Error())
 				return
 			}
 
@@ -247,7 +246,7 @@ func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
 	client := replogrpc.NewRepLogServiceClient(conn)
 
 	appendEntryRPC := func() (*replogrpc.AppendEntryResponse, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
 		defer cancel()
 
 		res, err := client.AppendEntryRPC(ctx, req.AppendEntry)

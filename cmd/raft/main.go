@@ -28,11 +28,11 @@ func main() {
 	if hostErr != nil { log.Fatal("unable to get hostname") }
 
 	systemsList := []*system.System[keyvalstore.KeyValOp]{
-		{ Host: "raftsrv1", NextIndex: 0, Status: system.Ready },
-		{ Host: "raftsrv2", NextIndex: 0, Status: system.Ready },
-		{ Host: "raftsrv3", NextIndex: 0, Status: system.Ready },
-		{ Host: "raftsrv4", NextIndex: 0, Status: system.Ready },
-		{ Host: "raftsrv5", NextIndex: 0, Status: system.Ready },
+		{ Host: "raftsrv1" },
+		{ Host: "raftsrv2" },
+		{ Host: "raftsrv3" },
+		{ Host: "raftsrv4" },
+		{ Host: "raftsrv5" },
 	}
 
 	sysFilter := func(sys *system.System[keyvalstore.KeyValOp]) bool { return sys.Host != hostname }

@@ -2,7 +2,9 @@ package replog
 
 import "github.com/sirgallo/raft/pkg/system"
 
+
 //=========================================== Sync Logs
+
 
 /*
 	Sync Logs:
@@ -22,7 +24,7 @@ func (rlService *ReplicatedLogService[T]) SyncLogs(host string) (bool, error) {
 
 	conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
 	if connErr != nil {
-		rlService.Log.Error("Failed to connect to", sys.Host+rlService.Port, ":", connErr.Error())
+		rlService.Log.Error("Failed to connect to", sys.Host + rlService.Port, ":", connErr.Error())
 		return false, connErr
 	}
 
