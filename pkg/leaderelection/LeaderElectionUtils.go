@@ -31,20 +31,29 @@ func initTimeoutOnStartup() time.Duration {
 		helper method for both determining the current alive systems in the cluster and also the minimum votes
 		needed for transitioning to leader
 
-		--> minimum is found by floor(total systems / 2) + 1
+		in a fault tolerant system like raft, we also need to be aware of the total number of faults that the 
+		cluster can withstand before the system can no longer make progress, so if the total alive systems are 
+		less than the minimum allowed systems for fault tolerance, we need to ensure that these systems do not 
+		become leaders and begin replicating in the case that a network partition occurs
+
+		this can be calculated by the following
+			quorum = floor((total systems / 2) + 1)
+		
 */
 
 func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*system.System[T], int64) {
 	var aliveSystems []*system.System[T]
+	totalSystems := int64(1)
 
 	leService.Systems.Range(func(key, value interface{}) bool {
 		sys := value.(*system.System[T])
 		if sys.Status != system.Dead { aliveSystems = append(aliveSystems, sys) }
+		totalSystems++
+		
 		return true
 	})
 
-	totAliveSystems := len(aliveSystems) + 1
-	return aliveSystems, int64((totAliveSystems / 2) + 1)
+	return aliveSystems, int64((totalSystems / 2) + 1)
 }
 
 /*

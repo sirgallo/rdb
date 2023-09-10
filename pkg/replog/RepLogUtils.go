@@ -106,7 +106,7 @@ func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64,
 		helper method for both determining the current alive systems in the cluster and also the minimum successful responses
 		needed for committing logs to the state machine
 
-		--> minimum is found by floor(total systems / 2) + 1
+		--> minimum is found by floor(total alive systems / 2) + 1
 */
 
 func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
