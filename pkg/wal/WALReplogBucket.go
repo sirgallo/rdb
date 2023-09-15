@@ -7,9 +7,6 @@ import "github.com/sirgallo/raft/pkg/log"
 
 
 func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
-	wal.mutex.Lock()
-	defer wal.mutex.Unlock()
-
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Bucket)
 		bucket := tx.Bucket(bucketName)
@@ -32,9 +29,6 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 }
 
 func (wal *WAL[T]) RangeUpdate(logs []*log.LogEntry[T]) error {
-	wal.mutex.Lock()
-	defer wal.mutex.Unlock()
-
 	for _, currLog := range logs {
 		transaction := func(tx *bolt.Tx) error {
 			bucketName := []byte(Bucket)

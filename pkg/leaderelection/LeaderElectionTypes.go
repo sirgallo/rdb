@@ -52,4 +52,4 @@ type LEResponseChannels struct {
 
 
 const NAME = "Leader Election"
-const RPCTimeout = 50 * time.Millisecond
+const RPCTimeout = 30 * time.Millisecond

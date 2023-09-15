@@ -1,11 +1,9 @@
 package wal
 
-import "sync"
 import bolt "go.etcd.io/bbolt"
 
 
 type WAL [T comparable] struct {
-	mutex sync.Mutex
 	DBFile string
 	DB *bolt.DB
 }
