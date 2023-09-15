@@ -186,8 +186,8 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 			if lastLogErr != nil { return false, lastLogErr }
 		
 			minCommitIndex := min(req.LeaderCommitIndex, lastLogIndex)
-
 			rlService.CurrentSystem.CommitIndex = minCommitIndex
+			
 			applyErr := rlService.ApplyLogs()
 			if applyErr != nil { return false, applyErr }
 		}
