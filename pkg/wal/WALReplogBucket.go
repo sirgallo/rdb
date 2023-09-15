@@ -28,26 +28,26 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 	return nil
 }
 
-func (wal *WAL[T]) RangeUpdate(logs []*log.LogEntry[T]) error {
-	for _, currLog := range logs {
-		transaction := func(tx *bolt.Tx) error {
-			bucketName := []byte(Bucket)
-			bucket := tx.Bucket(bucketName)
-	
+func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Bucket)
+		bucket := tx.Bucket(bucketName)
+
+		for _, currLog := range logs {
 			key := ConvertIntToBytes(currLog.Index)
-			
+		
 			newVal, transformErr := log.TransformLogEntryToBytes[T](currLog)
 			if transformErr != nil { return transformErr }
 	
 			putErr := bucket.Put(key, newVal)
 			if putErr != nil { return putErr }
-	
-			return nil
 		}
 
-		rangeUpdateErr := wal.DB.Update(transaction)
-		if rangeUpdateErr != nil { return rangeUpdateErr }
+		return nil
 	}
+
+	rangeUpdateErr := wal.DB.Update(transaction)
+	if rangeUpdateErr != nil { return rangeUpdateErr }
 
 	return nil
 }

@@ -60,5 +60,5 @@ type RLResponseChannels struct {
 
 const NAME = "Replicated Log"
 const HeartbeatInterval = 50 * time.Millisecond
-const RPCTimeout = 250 * time.Millisecond
+const RPCTimeout = 200 * time.Millisecond
 const AppendLogBuffSize = 100000

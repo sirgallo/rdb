@@ -201,21 +201,23 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 */
 
 func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
+	lastLogIndex, lastLogTerm, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil { return nil, lastLogErr }
+
 	s, ok := leService.Systems.Load(req.CandidateId)
 	if ! ok { 
 		sys := &system.System[T]{
 			Host: req.CandidateId,
 			Status: system.Ready,
+			NextIndex: lastLogIndex,
 		}
 
 		leService.Systems.Store(sys.Host, sys)
 	} else {
 		sys := s.(*system.System[T])
 		sys.SetStatus(system.Ready)
+		sys.UpdateNextIndex(lastLogIndex)
 	}
-
-	lastLogIndex, lastLogTerm, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
-	if lastLogErr != nil { return nil, lastLogErr }
 
 	leService.Log.Info("req current term:", req.CurrentTerm, "system current term:", leService.CurrentSystem.CurrentTerm)
 	leService.Log.Debug("latest log index:", lastLogIndex, "req last log index:", req.LastLogIndex)

@@ -169,7 +169,7 @@ func (raft *RaftService[T]) UpdateRepLogOnStartup() (bool, error) {
 		total, totalErr := raft.CurrentSystem.WAL.GetTotal(int64(0), lastLog.Index)
 		if totalErr == nil { Log.Error("error on get total from WAL", totalErr) }
 
-		Log.Debug("total entries on startup:", total)
+		Log.Info("total entries on startup:", total)
 	}
 
 	return true, nil

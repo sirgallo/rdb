@@ -146,23 +146,26 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 		}
 	}
 
+	var logsToAppend []*log.LogEntry[T]
+
 	appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) error {
 		newLog := logTransform(entry)
 		if newLog == nil { return errors.New("log transform failed, new log is null") }
-		rlService.CurrentSystem.WAL.Append(newLog.Index, newLog)
+		
+		logsToAppend = append(logsToAppend, newLog)
 
 		return nil
 	}
 
 	if req.Entries != nil {
-		for _, entry := range req.Entries {
+		for idx, entry := range req.Entries {
 			currEntry, readErr := rlService.CurrentSystem.WAL.Read(entry.Index)
 			if readErr != nil { return false, readErr }
 
 			if currEntry != nil {
 				if currEntry.Term != entry.Term {
-					transformedLogs := utils.Map[*replogrpc.LogEntry, *log.LogEntry[T]](req.Entries[:entry.Index + 1], logTransform)
-					rangeUpdateErr := rlService.CurrentSystem.WAL.RangeUpdate(transformedLogs)
+					transformedLogs := utils.Map[*replogrpc.LogEntry, *log.LogEntry[T]](req.Entries[:idx + 1], logTransform)
+					rangeUpdateErr := rlService.CurrentSystem.WAL.RangeAppend(transformedLogs)
 					if rangeUpdateErr != nil { return false, rangeUpdateErr }
 				}
 			} else {
@@ -170,6 +173,8 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 				if appendErr != nil { return false, appendErr }
 			}
 		}
+
+		rlService.CurrentSystem.WAL.RangeAppend(logsToAppend)
 	}
 
 	logAtCommitIndex, readErr := rlService.CurrentSystem.WAL.Read(req.LeaderCommitIndex)
