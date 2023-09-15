@@ -67,8 +67,6 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 			4.) sync logs
 				--> for systems with inconsistent replicated logs, start a separate go routine to sync
 					them back up to the leader
-			5.) write stream 
-				--> start write stream to append new committed logs to the WAL
 */
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {

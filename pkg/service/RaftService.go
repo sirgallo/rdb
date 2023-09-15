@@ -148,8 +148,8 @@ func (raft *RaftService[T]) StartRaftService() {
 
 /*
 	Update RepLog On Startup:
-		on system startup or restart replay the WAL to sync replicated log to end of WAL
-			1.) sync WAL to replog
+		on system startup or restart replay the WAL
+			1.) get the latest log from the WAL on disk
 			2.) update commit index to last log index from synced WAL --> WAL only contains committed logs
 			3.) update current term to term of last log
 */

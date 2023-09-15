@@ -85,8 +85,8 @@ func (sys *System[T]) SetCurrentLeader(leaderId string) bool {
 }
 
 /*
-	Set Current Leader:
-		1.) update the current leader id if not already
+	Set Status:
+		1.) update the status of the system to either Dead, Ready, or Busy
 */
 
 func (sys *System[T]) SetStatus(status SystemStatus) bool {

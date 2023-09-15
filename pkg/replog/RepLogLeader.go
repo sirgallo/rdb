@@ -77,14 +77,13 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() error {
 
 /*
 	Replicate Logs:
-		1.) append the new log to the replicated log on the Leader,
+		1.) append the new log to the WAL on the Leader,
 			--> index is just the index of the last log + 1
 			--> term is the current term on the leader
 		2.) prepare AppendEntryRPCs for each system in the Systems Map
 			--> determine the next index of the system that the rpc is prepared for from the system object at NextIndex
 		3.) on responses
-			--> if the Leader receives a success signal from the majority of the nodes in the cluster,
-				commit the logs to the state machine and apply committed logs to the WAL
+			--> if the Leader receives a success signal from the majority of the nodes in the cluster, apply the logs to the state machine
 			--> if a response with a higher term than its own, revert to Follower state
 			--> if a response with a last log index less than current log index on leader, sync logs until up to date
 */

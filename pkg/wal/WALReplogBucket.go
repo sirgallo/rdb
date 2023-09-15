@@ -6,6 +6,17 @@ import bolt "go.etcd.io/bbolt"
 import "github.com/sirgallo/raft/pkg/log"
 
 
+//=========================================== Write Ahead Log Replog Bucket Ops
+
+
+/*
+	Append
+		create a read-write transaction for the bucket to append a single new entry
+			1.) get the current bucket
+			2.) transform the entry and key to byte arrays
+			3.) put the key and value in the bucket
+*/
+
 func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Bucket)
@@ -27,6 +38,13 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 
 	return nil
 }
+
+/*
+	Range Append
+		create a read-write transaction for the bucket to append a set of new entries
+			1.) get the current bucket
+			2.) iterate over the new entries and perform the same as single Append
+*/
 
 func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 	transaction := func(tx *bolt.Tx) error {
@@ -51,6 +69,14 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 
 	return nil
 }
+
+/*
+	Read
+		create a read transaction for getting a single key-value entry
+			1.) get the current bucket
+			2.) get the value for the key as bytes
+			3.) transform the byte array back to an entry and return
+*/
 
 func (wal *WAL[T]) Read(index int64) (*log.LogEntry[T], error) {
 	var entry *log.LogEntry[T]
@@ -77,6 +103,16 @@ func (wal *WAL[T]) Read(index int64) (*log.LogEntry[T], error) {
 
 	return entry, nil
 }
+
+/*
+	Get Range
+		create a read transaction for getting a range of entries
+			1.) get the current bucket
+			2.) create a cursor for the bucket
+			3.) seek from the specified start index and iterate until end
+			4.) for each value, transform from byte array to entry and append to return array
+			5.) return all entries
+*/
 
 func (wal *WAL[T]) GetRange(startIndex int64, endIndex int64) ([]*log.LogEntry[T], error) {
 	var entries []*log.LogEntry[T]
@@ -112,6 +148,13 @@ func (wal *WAL[T]) GetRange(startIndex int64, endIndex int64) ([]*log.LogEntry[T
 	return entries, nil
 }
 
+/*
+	Get Latest
+		create a read transaction for getting the latest entry in the bucket
+			1.) get the current bucket
+			2.) create a cursor for the bucket and point at the last element in the bucket
+			3.) transform the value from byte array to entry and return the entry
+*/
 func (wal *WAL[T]) GetLatest() (*log.LogEntry[T], error) {
 	var latestEntry *log.LogEntry[T]
 
@@ -138,6 +181,15 @@ func (wal *WAL[T]) GetLatest() (*log.LogEntry[T], error) {
 	return latestEntry, nil
 }
 
+/*
+	Get Total
+		create a read transaction for getting total keys in the bucket
+			1.) get the current bucket
+			2.) create a cursor for the bucket
+			3.) start from the first element in the bucket and iterate, monotonically increasing
+				the total keys
+			4.) return total keys
+*/
 func (wal *WAL[T]) GetTotal(startIndex int64, endIndex int64) (int, error) {
 	totalKeys := 0
 	if startIndex >= endIndex { return totalKeys, nil }
