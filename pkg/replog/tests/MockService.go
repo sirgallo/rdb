@@ -1,29 +1,22 @@
 package replogtests
 
-import "log"
 import "os"
 import "sync"
 
+// import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/system"
 // import "github.com/sirgallo/raft/pkg/wal"
 
 
+const NAME = "Mock Replog Service"
+var Log = clog.NewCustomLog(NAME)
+
 func SetupMockReplogService() *replog.ReplicatedLogService[string] {
 	hostname, hostErr := os.Hostname()
-	if hostErr != nil { log.Fatal("unable to get hostname") }
-
-	// wal, walErr := wal.NewWAL()
-	// if walErr != nil { log.Fatal("unable to create or open WAL")  }
-
-	initLog := []*system.LogEntry[string]{
-		{ Index: 0, Term: 1, Command: "dummy" },
-		{ Index: 1, Term: 1, Command: "dummy" },
-		{ Index: 2, Term: 1, Command: "dummy" },
-		{ Index: 3, Term: 1, Command: "dummy" },
-		{ Index: 4, Term: 1, Command: "dummy" },
-	}
+	if hostErr != nil { Log.Fatal("unable to get hostname") }
 
 	currentSystem := &system.System[string]{
 		Host: hostname,
@@ -32,7 +25,6 @@ func SetupMockReplogService() *replog.ReplicatedLogService[string] {
 		LastApplied: 4,
 		Status: system.Ready,
 		State: system.Follower,
-		Replog: initLog,
 		// WAL: wal,
 	}
 

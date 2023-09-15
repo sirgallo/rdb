@@ -2,7 +2,7 @@ package replog
 
 import "errors"
 
-import "github.com/sirgallo/raft/pkg/system"
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
@@ -23,28 +23,37 @@ import "github.com/sirgallo/raft/pkg/utils"
 
 func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 	start := rlService.CurrentSystem.LastApplied + 1 // next to apply after last known applied
-	end := rlService.CurrentSystem.CommitIndex + 1   // include up to committed
+	end := rlService.CurrentSystem.CommitIndex  // include up to committed
 
-	var logsToBeCommited []*system.LogEntry[T]
+	var logsToBeApplied []*log.LogEntry[T]
+	
 	if start == end {
-		logsToBeCommited = append(logsToBeCommited, rlService.CurrentSystem.Replog[start])
-	} else { logsToBeCommited = append(logsToBeCommited, rlService.CurrentSystem.Replog[start:end]...) }
+		entry, readErr := rlService.CurrentSystem.WAL.Read(start)
+		if readErr != nil { return readErr }
 
-	transform := func(logEntry *system.LogEntry[T]) LogCommitChannelEntry[T] {
+		if entry != nil { logsToBeApplied = append(logsToBeApplied, entry) }
+	} else {
+		entries, rangeErr := rlService.CurrentSystem.WAL.GetRange(start, end)
+		if rangeErr != nil { return rangeErr }
+
+		logsToBeApplied = append(logsToBeApplied, entries...) 
+	}
+
+	transform := func(logEntry *log.LogEntry[T]) LogCommitChannelEntry[T] {
 		return LogCommitChannelEntry[T]{
 			LogEntry: logEntry,
 			Complete: false,
 		}
 	}
 
-	logCommitEntries := utils.Map[*system.LogEntry[T], LogCommitChannelEntry[T]](logsToBeCommited, transform)
+	logApplyEntries := utils.Map[*log.LogEntry[T], LogCommitChannelEntry[T]](logsToBeApplied, transform)
 
-	rlService.LogApplyChan <- logCommitEntries
-	completedLogs := <- rlService.LogApplyChan
+	rlService.LogApplyChan <- logApplyEntries
+	completedLogs :=<- rlService.LogApplyChan
 
 	for _, completeLog := range completedLogs {
 		if ! completeLog.Complete {
-			rlService.Log.Debug("incomplete log", completeLog)
+			rlService.Log.Error("incomplete log", completeLog)
 			return errors.New("incomplete commit of logs")
 		} else { rlService.CurrentSystem.LastApplied = int64(completeLog.LogEntry.Index) }
 	}

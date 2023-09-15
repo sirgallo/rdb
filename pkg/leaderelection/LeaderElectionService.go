@@ -3,6 +3,7 @@ package leaderelection
 import "net"
 import "time"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -18,7 +19,7 @@ import "google.golang.org/grpc"
 	--> initialize state to Follower and initialize a random timeout period for leader election
 */
 
-func NewLeaderElectionService[T system.MachineCommands](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
+func NewLeaderElectionService[T log.MachineCommands](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
 	leService := &LeaderElectionService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,

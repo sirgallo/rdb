@@ -1,6 +1,7 @@
 package clog
 
 import "fmt"
+import "os"
 import "strings"
 import "time"
 
@@ -35,6 +36,11 @@ func (cLog *CustomLog) Info(msg ...interface{}) {
 
 func (cLog *CustomLog) Warn(msg ...interface{}) {
 	cLog.formatOutput(Warn, msg)
+}
+
+func (cLog *CustomLog) Fatal(msg ...interface{}) {
+	cLog.formatOutput(Error, msg)
+	os.Exit(1)
 }
 
 /*

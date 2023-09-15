@@ -2,6 +2,7 @@ package service
 
 import "sync"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
@@ -15,14 +16,14 @@ type RaftPortOpts struct {
 	Relay int
 }
 
-type RaftServiceOpts [T system.MachineCommands] struct {
+type RaftServiceOpts [T log.MachineCommands] struct {
 	Protocol string
 	Ports RaftPortOpts
 	SystemsList []*system.System[T]
 	ConnPoolOpts connpool.ConnectionPoolOpts
 }
 
-type RaftService [T system.MachineCommands] struct {
+type RaftService [T log.MachineCommands] struct {
 	// Persistent State
 	Protocol string
 	Ports RaftPortOpts

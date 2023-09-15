@@ -29,13 +29,17 @@ func (rlService *ReplicatedLogService[T]) SyncLogs(host string) (bool, error) {
 	}
 
 	for {
+		preparedEntries, prepareErr := rlService.PrepareAppendEntryRPC(sys.NextIndex, false)
+		if prepareErr != nil { return false, prepareErr }
+
 		req := ReplicatedLogRequest{
 			Host: sys.Host,
-			AppendEntry: rlService.PrepareAppendEntryRPC(sys.NextIndex, false),
+			AppendEntry: preparedEntries,
 		}
 
-		res, err := rlService.clientAppendEntryRPC(conn, sys, req)
-		if err != nil { return false, err }
+		res, rpcErr := rlService.clientAppendEntryRPC(conn, sys, req)
+		if rpcErr != nil { return false, rpcErr }
+		
 		if res.Success {
 			sys.SetStatus(system.Ready)
 			rlService.ConnectionPool.PutConnection(sys.Host, conn)

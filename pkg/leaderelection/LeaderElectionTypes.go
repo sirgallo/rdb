@@ -3,6 +3,7 @@ package leaderelection
 import "sync"
 import "time"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/lerpc"
@@ -14,7 +15,7 @@ type TimeoutRange struct {
 	Max int
 }
 
-type LeaderElectionOpts [T system.MachineCommands] struct {
+type LeaderElectionOpts [T log.MachineCommands] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 	TimeoutRange TimeoutRange
@@ -24,7 +25,7 @@ type LeaderElectionOpts [T system.MachineCommands] struct {
 	Systems *sync.Map
 }
 
-type LeaderElectionService [T system.MachineCommands] struct {
+type LeaderElectionService [T log.MachineCommands] struct {
 	lerpc.UnimplementedLeaderElectionServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool
@@ -51,4 +52,4 @@ type LEResponseChannels struct {
 
 
 const NAME = "Leader Election"
-const RPCTimeout = 30 * time.Millisecond
+const RPCTimeout = 50 * time.Millisecond

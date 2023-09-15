@@ -26,11 +26,13 @@ import "github.com/sirgallo/raft/pkg/utils"
 			leader election timeout --> so randomly generate new timeout period for the system
 */
 
-func (leService *LeaderElectionService[T]) Election() {
+func (leService *LeaderElectionService[T]) Election() error {
 	leService.CurrentSystem.TransitionToCandidate()
 	leRespChans := leService.createLERespChannels()
 	aliveSystems, minimumVotes := leService.GetAliveSystemsAndMinVotes()
 	votesGranted := int64(1)
+	electionErrChan := make(chan error, 1)
+
 
 	var electionWG sync.WaitGroup
 
@@ -43,7 +45,12 @@ func (leService *LeaderElectionService[T]) Election() {
 				case <- *leRespChans.BroadcastClose:
 					if votesGranted >= int64(minimumVotes) {
 						leService.CurrentSystem.TransitionToLeader()
-						lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+						lastLogIndex, _, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
+						if lastLogErr != nil { 
+							electionErrChan <- lastLogErr 
+							return
+						}
+
 						leService.Systems.Range(func(key, value any) bool {
 							sys := value.(*system.System[T])
 							sys.UpdateNextIndex(lastLogIndex)
@@ -58,7 +65,7 @@ func (leService *LeaderElectionService[T]) Election() {
 						leService.attemptResetTimeoutSignal()
 					}
 
-					return
+					return 
 				case <- *leRespChans.VotesChan:
 					atomic.AddInt64(&votesGranted, 1)
 				case term :=<- *leRespChans.HigherTermDiscovered:
@@ -73,13 +80,21 @@ func (leService *LeaderElectionService[T]) Election() {
 	electionWG.Add(1)
 	go func() {
 		defer electionWG.Done()
-		leService.broadcastVotes(aliveSystems, leRespChans)
+		broadcastErr := leService.broadcastVotes(aliveSystems, leRespChans)
+		if broadcastErr != nil { leService.Log.Error("error on broadcast", broadcastErr) }
 	}()
 
 	electionWG.Wait()
 
 	close(*leRespChans.VotesChan)
 	close(*leRespChans.HigherTermDiscovered)
+
+	select {
+		case electionErr :=<- electionErrChan:
+			return electionErr
+		default:
+			return nil
+	}
 }
 
 /*
@@ -90,13 +105,15 @@ func (leService *LeaderElectionService[T]) Election() {
 		is discovered, all go routines are signalled to stop broadcasting.
 */
 
-func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system.System[T], leRespChans LEResponseChannels) {
+func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system.System[T], leRespChans LEResponseChannels) error {
 	defer close(*leRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+	lastLogIndex, lastLogTerm, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil { return lastLogErr }
+
 	request := &lerpc.RequestVote{
 		CurrentTerm:  leService.CurrentSystem.CurrentTerm,
 		CandidateId:  leService.CurrentSystem.Host,
@@ -163,6 +180,8 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 	}
 
 	requestVoteWG.Wait()
+
+	return nil
 }
 
 /*
@@ -195,10 +214,11 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 		sys.SetStatus(system.Ready)
 	}
 
-	lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](leService.CurrentSystem.Replog)
+	lastLogIndex, lastLogTerm, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil { return nil, lastLogErr }
 
 	leService.Log.Info("req current term:", req.CurrentTerm, "system current term:", leService.CurrentSystem.CurrentTerm)
-	leService.Log.Debug("latest log index:", lastLogIndex, "rep log length:", len(leService.CurrentSystem.Replog))
+	leService.Log.Debug("latest log index:", lastLogIndex, "req last log index:", req.LastLogIndex)
 	
 	if leService.CurrentSystem.VotedFor == utils.GetZero[string]() || leService.CurrentSystem.VotedFor == req.CandidateId {
 		if req.LastLogIndex >= lastLogIndex && req.LastLogTerm >= lastLogTerm {

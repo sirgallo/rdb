@@ -1,10 +1,10 @@
 package service
 
-import "log"
 import "net"
 import "os"
 import "sync"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/logger"
@@ -25,12 +25,12 @@ var Log = clog.NewCustomLog(NAME)
 	initialize sub modules under the same raft service and link together
 */
 
-func NewRaftService[T system.MachineCommands](opts RaftServiceOpts[T]) *RaftService[T] {
+func NewRaftService[T log.MachineCommands](opts RaftServiceOpts[T]) *RaftService[T] {
 	hostname, hostErr := os.Hostname()
-	if hostErr != nil { log.Fatal("unable to get hostname") }
+	if hostErr != nil { Log.Fatal("unable to get hostname") }
 
-	wal, walErr := wal.NewWAL()
-	if walErr != nil { log.Fatal("unable to create or open WAL") }
+	wal, walErr := wal.NewWAL[T]()
+	if walErr != nil { Log.Fatal("unable to create or open WAL") }
 
 	currentSystem := &system.System[T]{
 		Host: hostname,
@@ -38,7 +38,6 @@ func NewRaftService[T system.MachineCommands](opts RaftServiceOpts[T]) *RaftServ
 		CommitIndex: DefaultCommitIndex,
 		LastApplied: DefaultLastApplied,
 		Status: system.Ready,
-		Replog: []*system.LogEntry[T]{},
 		WAL: wal,
 	}
 
@@ -156,21 +155,21 @@ func (raft *RaftService[T]) StartRaftService() {
 */
 
 func (raft *RaftService[T]) UpdateRepLogOnStartup() (bool, error) {
-	logs, replayErr := raft.CurrentSystem.ReplayLogsOnStart()
+	lastLog, latestErr := raft.CurrentSystem.WAL.GetLatest()
 
-	if replayErr != nil {
-		return false, replayErr
-	} else if len(logs) > 0 {
-		raft.CurrentSystem.Replog = logs
-
-		lastLogIndex, lastLogTerm := system.DetermineLastLogIdxAndTerm[T](raft.CurrentSystem.Replog)
-		raft.CurrentSystem.CommitIndex = lastLogIndex
-		raft.CurrentSystem.CurrentTerm = lastLogTerm
+	if latestErr != nil {
+		return false, latestErr
+	} else if lastLog != nil {
+		raft.CurrentSystem.CommitIndex = lastLog.Index
+		raft.CurrentSystem.CurrentTerm = lastLog.Term
 
 		applyErr := raft.ReplicatedLog.ApplyLogs()
 		if applyErr != nil { return false, applyErr }
 
-		Log.Debug("on startup rep log length:", len(raft.CurrentSystem.Replog))
+		total, totalErr := raft.CurrentSystem.WAL.GetTotal(int64(0), lastLog.Index)
+		if totalErr == nil { Log.Error("error on get total from WAL", totalErr) }
+
+		Log.Debug("total entries on startup:", total)
 	}
 
 	return true, nil

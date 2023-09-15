@@ -2,20 +2,20 @@ package system
 
 import "sync"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/wal"
 
 
 type SystemState string
 type SystemStatus int
-type MachineCommands = comparable
 
-type LogEntry [T MachineCommands] struct {
+type LogEntry [T log.MachineCommands] struct {
 	Index int64
 	Term int64
 	Command T // command can be type T to represent the specific state machine commands 
 }
 
-type System [T MachineCommands] struct {
+type System [T log.MachineCommands] struct {
 	Host string
 	Status SystemStatus
 	
@@ -26,8 +26,7 @@ type System [T MachineCommands] struct {
 	VotedFor string
 	CurrentLeader string
 
-	Replog []*LogEntry[T]
-	WAL *wal.WAL
+	WAL *wal.WAL[T]
 
 	NextIndex int64 // next index to send to a server
 

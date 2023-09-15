@@ -3,13 +3,14 @@ package relay
 import "sync"
 import "time"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/relayrpc"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-type RelayOpts [T system.MachineCommands] struct {
+type RelayOpts [T log.MachineCommands] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 
@@ -18,7 +19,7 @@ type RelayOpts [T system.MachineCommands] struct {
 	Systems *sync.Map
 }
 
-type RelayService [T system.MachineCommands] struct {
+type RelayService [T log.MachineCommands] struct {
 	relayrpc.UnimplementedRelayServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool

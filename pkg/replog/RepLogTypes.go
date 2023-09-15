@@ -3,13 +3,14 @@ package replog
 import "sync"
 import "time"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-type ReplicatedLogOpts [T system.MachineCommands] struct {
+type ReplicatedLogOpts [T log.MachineCommands] struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 
@@ -18,12 +19,12 @@ type ReplicatedLogOpts [T system.MachineCommands] struct {
 	Systems *sync.Map
 }
 
-type LogCommitChannelEntry [T system.MachineCommands] struct {
-	LogEntry *system.LogEntry[T]
+type LogCommitChannelEntry [T log.MachineCommands] struct {
+	LogEntry *log.LogEntry[T]
 	Complete bool
 }
 
-type ReplicatedLogService [T system.MachineCommands] struct {
+type ReplicatedLogService [T log.MachineCommands] struct {
 	replogrpc.UnimplementedRepLogServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool
@@ -59,5 +60,5 @@ type RLResponseChannels struct {
 
 const NAME = "Replicated Log"
 const HeartbeatInterval = 50 * time.Millisecond
-const RPCTimeout = 30 * time.Millisecond
+const RPCTimeout = 250 * time.Millisecond
 const AppendLogBuffSize = 100000

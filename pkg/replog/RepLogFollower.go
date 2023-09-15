@@ -1,7 +1,9 @@
 package replog
 
 import "context"
+import "errors"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
@@ -51,17 +53,26 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	rlService.attemptLeadAckSignal()
 
-	failedNextIndex := func() int64 {
-		replogLength := len(rlService.CurrentSystem.Replog)
-		if replogLength == 0 || req.PrevLogIndex - 1 < 0 { return 0 }
-		return req.PrevLogIndex - 1
+	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil { return nil, lastLogErr }
+
+	total, totalErr := rlService.CurrentSystem.WAL.GetTotal(int64(0), lastLogIndex)
+	if totalErr != nil { return nil, totalErr }
+
+	failedNextIndex, indexErr := func() (int64, error) {
+		if total == 0 || req.PrevLogIndex - 1 < 0 { return 0, nil }
+		return req.PrevLogIndex - 1, nil
 	}()
 
+	if indexErr != nil { return nil, indexErr}
+
 	handleReqTerm := func() bool { return req.Term >= rlService.CurrentSystem.CurrentTerm }
-	handleReqValidTermAtIndex := func() bool {
-		// special case for when a system has empty replicated log or hearbeats where we don't check
-		if len(rlService.CurrentSystem.Replog) == 0 || req.Entries == nil { return true }
-		return rlService.CheckIndex(req.PrevLogIndex) && rlService.CurrentSystem.Replog[req.PrevLogIndex].Term == req.PrevLogTerm
+	handleReqValidTermAtIndex := func() (bool, error) {
+		currEntry, readErr := rlService.CurrentSystem.WAL.Read(req.PrevLogIndex)
+		if readErr != nil { return false, readErr }
+
+		if total == 0 || req.Entries == nil { return true, nil } // special case for when a system has empty replicated log or hearbeats where we don't check
+		return currEntry != nil && currEntry.Term == req.PrevLogTerm, nil
 	}
 
 	reqTermOk := handleReqTerm()
@@ -70,7 +81,9 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		return rlService.generateResponse(failedNextIndex, false), nil
 	}
 
-	reqTermValid := handleReqValidTermAtIndex()
+	reqTermValid, readErr := handleReqValidTermAtIndex()
+	if readErr != nil { return rlService.generateResponse(failedNextIndex, false), readErr }
+	
 	if ! reqTermValid {
 		rlService.Log.Warn("log at request previous index has mismatched term or does not exist, returning failed response")
 		return rlService.generateResponse(failedNextIndex, false), nil
@@ -78,7 +91,17 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	rlService.CurrentSystem.SetCurrentLeader(req.LeaderId)
 	_, repLogErr := rlService.HandleReplicateLogs(req)
-	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+	if repLogErr != nil { 
+		rlService.Log.Error("rep log handle error:", repLogErr)
+		return rlService.generateResponse(req.PrevLogIndex, false), repLogErr
+	}
+
+	lastLogIndex, _, lastLogErr = rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil { 
+		rlService.Log.Error("error getting last log index", lastLogErr)
+		return rlService.generateResponse(req.PrevLogIndex, false), lastLogErr 
+	}
+
 	nextLogIndex := lastLogIndex + 1
 
 	if repLogErr != nil {
@@ -109,47 +132,54 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 		return idx2
 	}
 
-	if req.Entries != nil {
-		appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) error {
-			cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
-			if decErr != nil {
-				rlService.Log.Error("error on decode -->", decErr.Error())
-				return decErr
-			}
-
-			newLog := &system.LogEntry[T]{
-				Index: entry.Index,
-				Term: entry.Term,
-				Command: *cmd,
-			}
-
-			rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
-
-			logAsBytes, encErr := system.TransformLogEntryToBytes[T](newLog)
-			if encErr != nil { rlService.Log.Error("encode err:", encErr.Error()) }
-
-			rlService.CurrentSystem.WAL.WriteStream <- logAsBytes
-
+	logTransform := func(entry *replogrpc.LogEntry) *log.LogEntry[T] {
+		cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
+		if decErr != nil {
+			rlService.Log.Error("error on decode -->", decErr.Error())
 			return nil
 		}
 
+		return &log.LogEntry[T]{
+			Index: entry.Index,
+			Term: entry.Term,
+			Command: *cmd,
+		}
+	}
+
+	appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) error {
+		newLog := logTransform(entry)
+		if newLog == nil { return errors.New("log transform failed, new log is null") }
+		rlService.CurrentSystem.WAL.Append(newLog.Index, newLog)
+
+		return nil
+	}
+
+	if req.Entries != nil {
 		for _, entry := range req.Entries {
-			if rlService.CheckIndex(entry.Index) {
-				if rlService.CurrentSystem.Replog[entry.Index].Term != entry.Term {
-					rlService.CurrentSystem.Replog = rlService.CurrentSystem.Replog[:entry.Index+1]
-					decErr := appendLogToReplicatedLog(entry)
-					if decErr != nil { return false, decErr }
+			currEntry, readErr := rlService.CurrentSystem.WAL.Read(entry.Index)
+			if readErr != nil { return false, readErr }
+
+			if currEntry != nil {
+				if currEntry.Term != entry.Term {
+					transformedLogs := utils.Map[*replogrpc.LogEntry, *log.LogEntry[T]](req.Entries[:entry.Index + 1], logTransform)
+					rangeUpdateErr := rlService.CurrentSystem.WAL.RangeUpdate(transformedLogs)
+					if rangeUpdateErr != nil { return false, rangeUpdateErr }
 				}
 			} else {
-				decErr := appendLogToReplicatedLog(entry)
-				if decErr != nil { return false, decErr }
+				appendErr := appendLogToReplicatedLog(entry)
+				if appendErr != nil { return false, appendErr }
 			}
 		}
 	}
 
-	if rlService.CheckIndex(req.LeaderCommitIndex) {
+	logAtCommitIndex, readErr := rlService.CurrentSystem.WAL.Read(req.LeaderCommitIndex)
+	if readErr != nil { return false, readErr }
+
+	if logAtCommitIndex != nil {
 		if req.LeaderCommitIndex > rlService.CurrentSystem.CommitIndex {
-			lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+			lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+			if lastLogErr != nil { return false, lastLogErr }
+		
 			minCommitIndex := min(req.LeaderCommitIndex, lastLogIndex)
 
 			rlService.CurrentSystem.CommitIndex = minCommitIndex

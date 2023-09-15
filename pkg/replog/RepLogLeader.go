@@ -5,6 +5,7 @@ import "sync"
 import "sync/atomic"
 import "google.golang.org/grpc"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
@@ -20,7 +21,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 		If a higher term is discovered in a response, revert the Leader back to Follower State
 */
 
-func (rlService *ReplicatedLogService[T]) Heartbeat() {
+func (rlService *ReplicatedLogService[T]) Heartbeat() error {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, _ := rlService.GetAliveSystemsAndMinSuccessResps()
 
@@ -28,9 +29,12 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 	successfulResps := int64(0)
 
 	for _, sys := range aliveSystems {
+		preparedEntries, prepareErr := rlService.PrepareAppendEntryRPC(sys.NextIndex, true)
+		if prepareErr != nil { return prepareErr }
+
 		request := ReplicatedLogRequest{
 			Host: sys.Host,
-			AppendEntry: rlService.PrepareAppendEntryRPC(sys.NextIndex, true),
+			AppendEntry: preparedEntries,
 		}
 
 		requests = append(requests, request)
@@ -67,6 +71,8 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 
 	close(*rlRespChans.SuccessChan)
 	close(*rlRespChans.HigherTermDiscovered)
+
+	return nil
 }
 
 /*
@@ -83,27 +89,45 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() {
 			--> if a response with a last log index less than current log index on leader, sync logs until up to date
 */
 
-func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
+func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, minSuccessfulResps := rlService.GetAliveSystemsAndMinSuccessResps()
-	lastLogIndex, _ := system.DetermineLastLogIdxAndTerm[T](rlService.CurrentSystem.Replog)
+
+	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil {
+		close(*rlRespChans.SuccessChan)
+		close(*rlRespChans.HigherTermDiscovered)
+
+		return lastLogErr
+	}
+
 	nextIndex := lastLogIndex + 1
 
 	requests := []ReplicatedLogRequest{}
 	successfulResps := int64(0)
 
-	newLog := &system.LogEntry[T]{
+	newLog := &log.LogEntry[T]{
 		Index: nextIndex,
 		Term: rlService.CurrentSystem.CurrentTerm,
 		Command: cmd,
 	}
 
-	rlService.CurrentSystem.Replog = append(rlService.CurrentSystem.Replog, newLog)
+	appendErr := rlService.CurrentSystem.WAL.Append(newLog.Index, newLog)
+	if appendErr != nil {
+		rlService.Log.Error("append error:", appendErr)
+		return appendErr 
+	}
 
 	for _, sys := range aliveSystems {
+		preparedEntries, prepareErr := rlService.PrepareAppendEntryRPC(sys.NextIndex, false)
+		if prepareErr != nil { 
+			rlService.Log.Error("prepare entries rpc error:", prepareErr)
+			return prepareErr 
+		}
+
 		request := ReplicatedLogRequest{
 			Host: sys.Host,
-			AppendEntry: rlService.PrepareAppendEntryRPC(sys.NextIndex, false),
+			AppendEntry: preparedEntries,
 		}
 
 		requests = append(requests, request)
@@ -122,12 +146,8 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 						rlService.Log.Info("at least minimum successful responses received:", successfulResps)
 						rlService.Log.Info("committing logs to state machine and appending to write ahead log")
 
-						logAsBytes, encErr := system.TransformLogEntryToBytes[T](newLog)
-						if encErr != nil { rlService.Log.Error("write err:", encErr.Error()) }
-
-						rlService.CurrentSystem.WAL.WriteStream <- logAsBytes
-
 						rlService.CurrentSystem.CommitIndex++
+						
 						applyErr := rlService.ApplyLogs()
 						if applyErr != nil { rlService.Log.Error("error applying command to state machine:", applyErr) }
 					} else { rlService.Log.Warn("minimum successful responses not received.") }
@@ -154,6 +174,8 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) {
 
 	close(*rlRespChans.SuccessChan)
 	close(*rlRespChans.HigherTermDiscovered)
+
+	return nil
 }
 
 /*

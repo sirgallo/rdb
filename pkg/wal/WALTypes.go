@@ -1,11 +1,17 @@
 package wal
 
-import "os"
 import "sync"
+import bolt "go.etcd.io/bbolt"
 
 
-type WAL struct {
+type WAL [T comparable] struct {
 	mutex sync.Mutex
-	File *os.File
-	WriteStream chan []byte
+	DBFile string
+	DB *bolt.DB
 }
+
+
+const NAME = "WAL"
+const SubDirectory = "raft/replog"
+const FileName = "replog.db"
+const Bucket = "replog"

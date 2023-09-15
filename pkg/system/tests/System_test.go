@@ -1,22 +1,26 @@
 package systemtests
 
-import "log"
 import "os"
 import "testing"
 
+import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/system"
 // import "github.com/sirgallo/raft/pkg/wal"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+const NAME = "Mock System"
+var Log = clog.NewCustomLog(NAME)
+
 func SetupMockExistingSystem() *system.System[string] {
 	hostname, hostErr := os.Hostname()
-	if hostErr != nil { log.Fatal("unable to get hostname") }
+	if hostErr != nil { Log.Fatal("unable to get hostname") }
 
 	// wal, walErr := wal.NewWAL()
 	// if walErr != nil { log.Fatal("unable to create or open WAL")  }
 	
-	replog := []*system.LogEntry[string]{
+	replog := []*log.LogEntry[string]{
 		{ Index: 0, Term: 1, Command: "dummy" },
 		{ Index: 1, Term: 1, Command: "dummy" },
 		{ Index: 2, Term: 1, Command: "dummy" },
@@ -31,7 +35,7 @@ func SetupMockExistingSystem() *system.System[string] {
 		LastApplied: 4,
 		Status: system.Ready,
 		State: system.Follower,
-		Replog: replog,
+		// Replog: replog,
 		// WAL: wal,
 	}
 
@@ -40,7 +44,7 @@ func SetupMockExistingSystem() *system.System[string] {
 
 func SetupMockNewSystem() *system.System[string] {
 	hostname, hostErr := os.Hostname()
-	if hostErr != nil { log.Fatal("unable to get hostname") }
+	if hostErr != nil { Log.Fatal("unable to get hostname") }
 
 	// wal, walErr := wal.NewWAL()
 	// if walErr != nil { log.Fatal("unable to create or open WAL")  }
@@ -52,7 +56,7 @@ func SetupMockNewSystem() *system.System[string] {
 		LastApplied: -1,
 		Status: system.Ready,
 		State: system.Follower,
-		Replog: []*system.LogEntry[string]{},
+		// Replog: []*log.LogEntry[string]{},
 		// WAL: wal,
 	}
 

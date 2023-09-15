@@ -4,6 +4,7 @@ import "context"
 import "errors"
 import "net"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/relayrpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -18,7 +19,7 @@ import "google.golang.org/grpc"
 	create a new service instance with passable options
 */
 
-func NewRelayService [T system.MachineCommands](opts *RelayOpts[T]) *RelayService[T] {
+func NewRelayService [T log.MachineCommands](opts *RelayOpts[T]) *RelayService[T] {
 	rService := &RelayService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,

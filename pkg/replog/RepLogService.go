@@ -4,6 +4,7 @@ import "net"
 import "time"
 import "google.golang.org/grpc"
 
+import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -17,7 +18,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 	create a new service instance with passable options
 */
 
-func NewReplicatedLogService [T system.MachineCommands](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
+func NewReplicatedLogService [T log.MachineCommands](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
 	rlService := &ReplicatedLogService[T]{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
@@ -117,8 +118,6 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 			go rlService.SyncLogs(host)
 		}
 	}()
-
-	rlService.CurrentSystem.WAL.StartWriteStream()
 }
 
 func (rlService *ReplicatedLogService[T]) attemptResetTimeout() {
