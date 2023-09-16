@@ -1,5 +1,7 @@
 package statemachine
 
+import "sync"
+
 
 type Action = string
 type Data = comparable
@@ -11,6 +13,7 @@ type StateMachineOperation [T Action, U Data] struct {
 }
 
 type StateMachine [T Action, U Data, V State] struct {
+	Mutex sync.Mutex
 	State V
 	Ops func(operation StateMachineOperation[T, U]) (U, error)
 }

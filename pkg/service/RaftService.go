@@ -10,6 +10,8 @@ import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/relay"
 import "github.com/sirgallo/raft/pkg/replog"
+import "github.com/sirgallo/raft/pkg/snapshot"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/wal"
 
@@ -25,7 +27,7 @@ var Log = clog.NewCustomLog(NAME)
 	initialize sub modules under the same raft service and link together
 */
 
-func NewRaftService[T log.MachineCommands](opts RaftServiceOpts[T]) *RaftService[T] {
+func NewRaftService[T log.MachineCommands, U statemachine.Action, V statemachine.Data, W statemachine.State](opts RaftServiceOpts[T, U, V, W]) *RaftService[T, U, V, W] {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { Log.Fatal("unable to get hostname") }
 
@@ -41,7 +43,7 @@ func NewRaftService[T log.MachineCommands](opts RaftServiceOpts[T]) *RaftService
 		WAL: wal,
 	}
 
-	raft := &RaftService[T]{
+	raft := &RaftService[T, U, V, W]{
 		Protocol: opts.Protocol,
 		Systems: &sync.Map{},
 		CurrentSystem: currentSystem,
@@ -60,6 +62,7 @@ func NewRaftService[T log.MachineCommands](opts RaftServiceOpts[T]) *RaftService
 	leConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	rlConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	rConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
+	snpConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
 	leOpts := &leaderelection.LeaderElectionOpts[T]{
 		Port: opts.Ports.LeaderElection,
@@ -82,13 +85,25 @@ func NewRaftService[T log.MachineCommands](opts RaftServiceOpts[T]) *RaftService
 		Systems: raft.Systems,
 	}
 
+	snpOpts := &snapshot.SnapshotServiceOpts[T, U, V, W]{
+		Port: opts.Ports.Snapshot,
+		ConnectionPool: snpConnPool,
+		CurrentSystem: currentSystem,
+		Systems: raft.Systems,
+		StateMachine: opts.StateMachine,
+		SnapshotHandler: opts.SnapshotHandler,
+		// SnapshotReplayer: opts.SnapshotReplayer,
+	}
+
 	leService := leaderelection.NewLeaderElectionService[T](leOpts)
 	rlService := replog.NewReplicatedLogService[T](rlOpts)
 	rService := relay.NewRelayService[T](rOpts)
+	snpService := snapshot.NewSnapshotService[T, U, V, W](snpOpts)
 
 	raft.LeaderElection = leService
 	raft.ReplicatedLog = rlService
 	raft.Relay = rService
+	raft.Snapshot = snpService
 
 	return raft
 }
@@ -110,7 +125,7 @@ func NewRaftService[T log.MachineCommands](opts RaftServiceOpts[T]) *RaftService
 		3.) start module pass throughs 
 */
 
-func (raft *RaftService[T]) StartRaftService() {
+func (raft *RaftService[T, U, V, W]) StartRaftService() {
 	go func() {
 		for {
 			logs :=<- raft.ReplicatedLog.LogApplyChan
@@ -154,7 +169,14 @@ func (raft *RaftService[T]) StartRaftService() {
 			3.) update current term to term of last log
 */
 
-func (raft *RaftService[T]) UpdateRepLogOnStartup() (bool, error) {
+func (raft *RaftService[T, U, V, W]) UpdateRepLogOnStartup() (bool, error) {
+	snapshot, snapshotErr := raft.CurrentSystem.WAL.GetSnapshot()
+	if snapshotErr != nil { return false, snapshotErr }
+	if snapshot != nil { 
+		_, replayErr := raft.SnapshotReplayer(raft.StateMachine, snapshot) 
+		if replayErr != nil { return false, replayErr }
+	}
+
 	lastLog, latestErr := raft.CurrentSystem.WAL.GetLatest()
 
 	if latestErr != nil {
@@ -180,7 +202,7 @@ func (raft *RaftService[T]) UpdateRepLogOnStartup() (bool, error) {
 		initialize net listeners and start all sub modules
 */
 
-func (raft *RaftService[T]) StartModules() {
+func (raft *RaftService[T, U, V, W]) StartModules() {
 	leListener, leErr := net.Listen(raft.Protocol, raft.LeaderElection.Port)
 	if leErr != nil { Log.Error("Failed to listen: %v", leErr.Error()) }
 
@@ -190,9 +212,13 @@ func (raft *RaftService[T]) StartModules() {
 	rListener, rErr := net.Listen(raft.Protocol, raft.Relay.Port)
 	if rErr != nil { Log.Error("Failed to listen: %v", rErr.Error()) }
 
+	snpListener, snpErr := net.Listen(raft.Protocol, raft.Snapshot.Port)
+	if snpErr != nil { Log.Error("Failed to listen: %v", snpErr.Error()) }
+
 	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)
 	go raft.LeaderElection.StartLeaderElectionService(&leListener)
 	go raft.Relay.StartRelayService(&rListener)
+	go raft.Snapshot.StartSnapshotService(&snpListener)
 }
 
 /*
@@ -210,7 +236,7 @@ func (raft *RaftService[T]) StartModules() {
 			follower to current leader	
 */
 
-func (raft *RaftService[T]) StartModulePassThroughs() {
+func (raft *RaftService[T, U, V, W]) StartModulePassThroughs() {
 	go func() {
 		for {
 			<- raft.ReplicatedLog.LeaderAcknowledgedSignal
@@ -238,6 +264,13 @@ func (raft *RaftService[T]) StartModulePassThroughs() {
 			if raft.CurrentSystem.State == system.Leader {
 				raft.ReplicatedLog.AppendLogSignal <- cmdEntry
 			} else { raft.Relay.RelayChannel <- cmdEntry }
+		}
+	}()
+
+	go func() {
+		for {
+			<- raft.ReplicatedLog.SignalSnapshot
+			raft.Snapshot.SnapshotSignal <- true
 		}
 	}()
 }

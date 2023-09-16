@@ -42,6 +42,7 @@ type ReplicatedLogService [T log.MachineCommands] struct {
 	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
 	SyncLogChannel chan string
+	SignalSnapshot chan bool
 
 	Log clog.CustomLog
 }
@@ -61,4 +62,4 @@ type RLResponseChannels struct {
 const NAME = "Replicated Log"
 const HeartbeatInterval = 50 * time.Millisecond
 const RPCTimeout = 200 * time.Millisecond
-const AppendLogBuffSize = 100000
+const AppendLogBuffSize = 1000000

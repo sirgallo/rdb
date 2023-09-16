@@ -32,19 +32,24 @@ func main() {
 	sysFilter := func(sys *system.System[keyvalstore.KeyValOp]) bool { return sys.Host != hostname }
 	otherSystems := utils.Filter[*system.System[keyvalstore.KeyValOp]](systemsList, sysFilter)
 
-	raftOpts := service.RaftServiceOpts[keyvalstore.KeyValOp]{
+	kvstore := keyvalstore.NewKeyValStore()
+
+	raftOpts := service.RaftServiceOpts[keyvalstore.KeyValOp, keyvalstore.KeyValOps, keyvalstore.KeyValPair, keyvalstore.KeyValStore]{
 		Protocol: "tcp",
 		Ports: service.RaftPortOpts{
 			LeaderElection: 54321,
 			ReplicatedLog: 54322,
 			Relay: 54323,
+			Snapshot: 54324,
 		},
 		SystemsList: otherSystems,
 		ConnPoolOpts: connpool.ConnectionPoolOpts{ MaxConn: 10 },
+		StateMachine: kvstore,
+		SnapshotHandler: keyvalstore.SnapshotKeyValStore,
+		// SnapshotReplayer: ,
 	}
 
-	raft := service.NewRaftService[keyvalstore.KeyValOp](raftOpts)
-	kvstore := keyvalstore.NewKeyValStore()
+	raft := service.NewRaftService[keyvalstore.KeyValOp, keyvalstore.KeyValOps, keyvalstore.KeyValPair, keyvalstore.KeyValStore](raftOpts)
 
 	go raft.StartRaftService()
 

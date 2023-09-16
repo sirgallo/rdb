@@ -1,12 +1,18 @@
 package replog
 
 import "errors"
+import "sync"
 
 import "github.com/sirgallo/raft/pkg/log"
+import "github.com/sirgallo/raft/pkg/snapshot"
+import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== RepLog Commit
+
+
+var applyMutex sync.Mutex
 
 
 /*
@@ -56,6 +62,11 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 			rlService.Log.Error("incomplete log", completeLog)
 			return errors.New("incomplete commit of logs")
 		} else { rlService.CurrentSystem.LastApplied = int64(completeLog.LogEntry.Index) }
+	}
+
+	if rlService.CurrentSystem.LastApplied >= snapshot.SnapshotTriggerAppliedIndex && rlService.CurrentSystem.State == system.Leader {
+		rlService.SignalSnapshot <- true
+		<- rlService.SignalSnapshot
 	}
 
 	return nil

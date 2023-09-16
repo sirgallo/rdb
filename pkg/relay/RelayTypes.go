@@ -37,6 +37,6 @@ type RelayService [T log.MachineCommands] struct {
 
 
 const NAME = "Relay"
-const RPCTimeout = 30 * time.Millisecond
+const RPCTimeout = 50 * time.Millisecond
 const RelayChannelBuffSize = 100000
-const FailedBuffSize = 1000
+const FailedBuffSize = 10000

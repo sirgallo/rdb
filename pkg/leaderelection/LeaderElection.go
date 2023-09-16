@@ -51,7 +51,7 @@ func (leService *LeaderElectionService[T]) Election() error {
 							return
 						}
 
-						leService.Systems.Range(func(key, value any) bool {
+						leService.Systems.Range(func(key, value interface{}) bool {
 							sys := value.(*system.System[T])
 							sys.UpdateNextIndex(lastLogIndex)
 							

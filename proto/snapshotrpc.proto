@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package snapshotrpc;
+option go_package = "./pkg/snapshotrpc";
+
+
+service SnapshotService {
+  rpc SnapshotRPC(Snapshot) returns (SnapshotResponse) {}
+}
+
+message Snapshot {
+  int64 SnapshotIndex = 1;
+  string LeaderId = 2;
+  int64 LastIncludedIndex = 3;
+  int64 LastIncludedTerm = 4;
+  repeated string StateMachineState = 5;
+}
+
+message SnapshotResponse {
+  bool Success = 1;
+}

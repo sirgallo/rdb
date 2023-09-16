@@ -190,6 +190,7 @@ func (wal *WAL[T]) GetLatest() (*log.LogEntry[T], error) {
 				the total keys
 			4.) return total keys
 */
+
 func (wal *WAL[T]) GetTotal(startIndex int64, endIndex int64) (int, error) {
 	totalKeys := 0
 	if startIndex >= endIndex { return totalKeys, nil }
@@ -211,4 +212,27 @@ func (wal *WAL[T]) GetTotal(startIndex int64, endIndex int64) (int, error) {
 	if readErr != nil { return 0, readErr }
 
 	return totalKeys, nil
+}
+
+func (wal *WAL[T]) DeleteLogs(endIndex int64) error {
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Bucket)
+		bucket := tx.Bucket(bucketName)
+
+		endKey := ConvertIntToBytes(endIndex)
+
+		cursor := bucket.Cursor()
+		
+		for key, _ := cursor.First(); key != nil && bytes.Compare(key, endKey) <= 0; key, _ = cursor.Next() {
+			delErr := bucket.Delete(key)
+			if delErr != nil { return delErr }
+		}
+
+		return nil
+	}
+
+	delErr := wal.DB.Update(transaction)
+	if delErr != nil { return delErr }
+
+	return nil
 }

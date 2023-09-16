@@ -29,6 +29,7 @@ func NewReplicatedLogService [T log.MachineCommands](opts *ReplicatedLogOpts[T])
 		LogApplyChan: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
+		SignalSnapshot: make(chan bool),
 		Log: *clog.NewCustomLog(NAME),
 	}
 

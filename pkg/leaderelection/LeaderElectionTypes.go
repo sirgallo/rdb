@@ -21,7 +21,6 @@ type LeaderElectionOpts [T log.MachineCommands] struct {
 	TimeoutRange TimeoutRange
 
 	CurrentSystem *system.System[T]
-	SystemsList []*system.System[T]
 	Systems *sync.Map
 }
 

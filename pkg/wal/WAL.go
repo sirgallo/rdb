@@ -40,6 +40,17 @@ func NewWAL [T log.MachineCommands]() (*WAL[T], error) {
 	bucketErrRepLog := db.Update(replogTransaction)
 	if bucketErrRepLog != nil { return nil, bucketErrRepLog }
 
+	snapshotTransaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Snapshot)
+		_, createErr := tx.CreateBucketIfNotExists(bucketName)
+		if createErr != nil { return createErr }
+
+		return nil
+	}
+
+	bucketErrSnapshot := db.Update(snapshotTransaction)
+	if bucketErrSnapshot != nil { return nil, bucketErrSnapshot }
+
   return &WAL[T]{ 
 		DBFile: dbPath,
 		DB: db,

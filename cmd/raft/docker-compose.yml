@@ -13,6 +13,7 @@ services:
       - 54321
       - 54322
       - 54323
+      - 54324
     volumes:
       - $HOME/raftsrv1:/home/raft/replog
   raftsrv2:
@@ -28,6 +29,7 @@ services:
       - 54321
       - 54322
       - 54323
+      - 54324
     volumes:
       - $HOME/raftsrv2:/home/raft/replog
   raftsrv3:
@@ -43,6 +45,7 @@ services:
       - 54321
       - 54322
       - 54323
+      - 54324
     volumes:
       - $HOME/raftsrv3:/home/raft/replog
   raftsrv4:
@@ -58,6 +61,7 @@ services:
       - 54321
       - 54322
       - 54323
+      - 54324
     volumes:
       - $HOME/raftsrv4:/home/raft/replog
   raftsrv5:
@@ -73,6 +77,7 @@ services:
       - 54321
       - 54322
       - 54323
+      - 54324
     volumes:
       - $HOME/raftsrv5:/home/raft/replog
 networks:
