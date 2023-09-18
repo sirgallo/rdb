@@ -10,7 +10,7 @@ import "github.com/sirgallo/raft/pkg/service"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
-import "github.com/sirgallo/raft/generated/keyvalstore"
+import "github.com/sirgallo/raft/adjunct/keyvalstore"
 
 
 const NAME = "Main"
