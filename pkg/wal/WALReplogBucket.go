@@ -26,9 +26,6 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 		walBucketName := []byte(ReplogWAL)
 		walBucket := bucket.Bucket(walBucketName)
 
-		statsBucketName := []byte(ReplogStats)
-		statsBucket := bucket.Bucket(statsBucketName)
-
 		key := ConvertIntToBytes(index)
 
 		value, transformErr := log.TransformLogEntryToBytes[T](entry)
@@ -40,29 +37,8 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 		totalBytesAdded := int64(len(key)) + int64(len(value))
 		totalKeysAdded := int64(1)
 
-		sizeKey := []byte(ReplogSizeKey)
-		totalKey := []byte(ReplogTotalElementsKey)
-
-		var bucketSize, totalKeys int64
-		
-		sizeVal := statsBucket.Get(sizeKey)
-		if sizeVal == nil {
-			bucketSize = 0
-		} else { bucketSize = ConvertBytesToInt(sizeVal) }
-
-		totalVal := statsBucket.Get(totalKey)
-		if totalVal == nil {
-			totalKeys = 0
-		} else { totalKeys = ConvertBytesToInt(totalVal) }
-
-		newBucketSize := bucketSize + totalBytesAdded
-		newTotal := totalKeys + totalKeysAdded
-
-		putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
-		if putSizeErr != nil { return putSizeErr }
-
-		putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
-		if putTotalErr != nil { return putTotalErr }
+		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, SUB)
+		if updateErr != nil { return updateErr }
 
 		return nil
 	}
@@ -88,9 +64,6 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 		walBucketName := []byte(ReplogWAL)
 		walBucket := bucket.Bucket(walBucketName)
 
-		statsBucketName := []byte(ReplogStats)
-		statsBucket := bucket.Bucket(statsBucketName)
-
 		totalBytesAdded := int64(0)
 		totalKeysAdded := int64(1)
 
@@ -107,29 +80,8 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 			totalKeysAdded++
 		}
 
-		sizeKey := []byte(ReplogSizeKey)
-		totalKey := []byte(ReplogTotalElementsKey)
-
-		var bucketSize, totalKeys int64
-		
-		sizeVal := statsBucket.Get(sizeKey)
-		if sizeVal == nil {
-			bucketSize = 0
-		} else { bucketSize = ConvertBytesToInt(sizeVal) }
-
-		totalVal := statsBucket.Get(totalKey)
-		if totalVal == nil {
-			totalKeys = 0
-		} else { totalKeys = ConvertBytesToInt(totalVal) }
-
-		newBucketSize := bucketSize + totalBytesAdded
-		newTotal := totalKeys + totalKeysAdded
-
-		putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
-		if putSizeErr != nil { return putSizeErr }
-
-		putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
-		if putTotalErr != nil { return putTotalErr }
+		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, SUB)
+		if updateErr != nil { return updateErr }
 
 		return nil
 	}
@@ -373,9 +325,6 @@ func (wal *WAL[T]) DeleteLogs(endIndex int64) error {
 		walBucketName := []byte(ReplogWAL)
 		walBucket := bucket.Bucket(walBucketName)
 
-		statsBucketName := []byte(ReplogStats)
-		statsBucket := bucket.Bucket(statsBucketName)
-
 		endKey := ConvertIntToBytes(endIndex)
 
 		cursor := walBucket.Cursor()
@@ -391,35 +340,52 @@ func (wal *WAL[T]) DeleteLogs(endIndex int64) error {
 			totalKeysRemoved++
 		}
 
-		sizeKey := []byte(ReplogSizeKey)
-		totalKey := []byte(ReplogTotalElementsKey)
-
-		var bucketSize, totalKeys int64
+		updateErr := wal.UpdateReplogStats(bucket, totalBytesRemoved, totalKeysRemoved, SUB)
+		if updateErr != nil { return updateErr }
 		
-		sizeVal := statsBucket.Get(sizeKey)
-		if sizeVal == nil {
-			bucketSize = 0
-		} else { bucketSize = ConvertBytesToInt(sizeVal) }
-
-		totalVal := statsBucket.Get(totalKey)
-		if totalVal == nil {
-			totalKeys = 0
-		} else { totalKeys = ConvertBytesToInt(totalVal) }
-
-		newBucketSize := bucketSize - totalBytesRemoved
-		newTotal := totalKeys - totalKeysRemoved
-
-		putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
-		if putSizeErr != nil { return putSizeErr }
-
-		putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
-		if putTotalErr != nil { return putTotalErr }
-
 		return nil
 	}
 
 	delErr := wal.DB.Update(transaction)
 	if delErr != nil { return delErr }
+
+	return nil
+}
+
+func (wal *WAL[T]) UpdateReplogStats(bucket *bolt.Bucket, numUpdatedBytes int64, numUpdatedKeys int64, op StatOP) error {
+	statsBucketName := []byte(ReplogStats)
+	statsBucket := bucket.Bucket(statsBucketName)
+	
+	sizeKey := []byte(ReplogSizeKey)
+	totalKey := []byte(ReplogTotalElementsKey)
+
+	var bucketSize, totalKeys int64
+	
+	sizeVal := statsBucket.Get(sizeKey)
+	if sizeVal == nil {
+		bucketSize = 0
+	} else { bucketSize = ConvertBytesToInt(sizeVal) }
+
+	totalVal := statsBucket.Get(totalKey)
+	if totalVal == nil {
+		totalKeys = 0
+	} else { totalKeys = ConvertBytesToInt(totalVal) }
+
+	var newBucketSize, newTotal int64
+
+	if op == ADD {
+		newBucketSize = bucketSize + numUpdatedBytes
+		newTotal = totalKeys + numUpdatedKeys
+	} else if op == SUB {
+		newBucketSize = bucketSize - numUpdatedBytes
+		newTotal = totalKeys - numUpdatedKeys
+	}
+
+	putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
+	if putSizeErr != nil { return putSizeErr }
+
+	putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
+	if putTotalErr != nil { return putTotalErr }
 
 	return nil
 }

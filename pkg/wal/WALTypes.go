@@ -11,6 +11,7 @@ type WAL [T comparable] struct {
 	DB *bolt.DB
 }
 
+type StatOP = string
 
 const NAME = "WAL"
 const SubDirectory = "raft/replog"
@@ -21,6 +22,11 @@ const ReplogWAL = Replog + "_wal"
 const ReplogStats = Replog + "_stats"
 const ReplogTotalElementsKey = "total"
 const ReplogSizeKey = "size"
+
+const (
+	ADD StatOP = "ADD"
+	SUB StatOP = "SUB"
+)
 
 const Snapshot = "snapshot"
 const SnapshotKey = "currentsnapshot"

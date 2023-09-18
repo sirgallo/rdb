@@ -74,7 +74,7 @@ func (rService *RelayService[T]) RelayListener() {
 			cmd :=<- rService.RelayChannel
 			if rService.CurrentSystem.State == system.Follower {
 				_, err := rService.RelayClientRPC(cmd)
-				if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry") }
+				if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry", err.Error()) }
 			} else if rService.CurrentSystem.State == system.Leader {
 				rService.RelayedAppendLogSignal <- cmd
 			}
