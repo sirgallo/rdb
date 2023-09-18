@@ -77,8 +77,6 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 		return lastAppliedAtThreshold && rlService.CurrentSystem.State == system.Leader
 	}()
 
-
-
 	if triggerSnapshot {
 		go func () { rlService.SignalStartSnapshot <- true }()
 		go func () { rlService.PauseReplogSignal <- true }()
