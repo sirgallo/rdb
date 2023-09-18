@@ -51,6 +51,17 @@ func NewWAL [T log.MachineCommands]() (*WAL[T], error) {
 	bucketErrSnapshot := db.Update(snapshotTransaction)
 	if bucketErrSnapshot != nil { return nil, bucketErrSnapshot }
 
+	statsTransaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Stats)
+		_, createErr := tx.CreateBucketIfNotExists(bucketName)
+		if createErr != nil { return createErr }
+
+		return nil
+	}
+
+	bucketErrStats := db.Update(statsTransaction)
+	if bucketErrStats != nil { return nil, bucketErrStats }
+
   return &WAL[T]{ 
 		DBFile: dbPath,
 		DB: db,

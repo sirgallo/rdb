@@ -114,7 +114,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	}
 
 	successfulResp := rlService.generateResponse(nextLogIndex, true)
-	rlService.Log.Info("leader acknowledged and returning successful response:", successfulResp)
+	rlService.Log.Info("leader", req.LeaderId, "acknowledged and returning successful response:", successfulResp)
 
 	return successfulResp, nil
 }

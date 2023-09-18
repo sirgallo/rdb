@@ -12,6 +12,7 @@ import "github.com/sirgallo/raft/pkg/relay"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/snapshot"
 import "github.com/sirgallo/raft/pkg/statemachine"
+import "github.com/sirgallo/raft/pkg/stats"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/wal"
 
@@ -153,7 +154,10 @@ func (raft *RaftService[T, U, V, W]) StartRaftService() {
 	_, updateErr := raft.UpdateRepLogOnStartup()
 	if updateErr != nil { Log.Error("error on log replication:", updateErr.Error()) }
 
+	raft.InitStats()
+
 	updateStateMachineMutex.Unlock()
+
 
 	raft.StartModules()
 	raft.StartModulePassThroughs()
@@ -172,6 +176,7 @@ func (raft *RaftService[T, U, V, W]) StartRaftService() {
 func (raft *RaftService[T, U, V, W]) UpdateRepLogOnStartup() (bool, error) {
 	snapshot, snapshotErr := raft.CurrentSystem.WAL.GetSnapshot()
 	if snapshotErr != nil { return false, snapshotErr }
+
 	if snapshot != nil { 
 		_, replayErr := raft.SnapshotReplayer(raft.StateMachine, snapshot) 
 		if replayErr != nil { return false, replayErr }
@@ -189,7 +194,7 @@ func (raft *RaftService[T, U, V, W]) UpdateRepLogOnStartup() (bool, error) {
 		if applyErr != nil { return false, applyErr }
 
 		total, totalErr := raft.CurrentSystem.WAL.GetTotal(int64(0), lastLog.Index)
-		if totalErr == nil { Log.Error("error on get total from WAL", totalErr) }
+		if totalErr != nil { return false , totalErr }
 
 		Log.Info("total entries on startup:", total)
 	}
@@ -269,8 +274,38 @@ func (raft *RaftService[T, U, V, W]) StartModulePassThroughs() {
 
 	go func() {
 		for {
-			<- raft.ReplicatedLog.SignalSnapshot
-			raft.Snapshot.SnapshotSignal <- true
+			<- raft.ReplicatedLog.SignalStartSnapshot
+			raft.Snapshot.SnapshotStartSignal <- true
 		}
 	}()
+
+	go func() {
+		for {
+			<- raft.Snapshot.SnapshotCompleteSignal
+			raft.ReplicatedLog.SignalCompleteSnapshot <- true
+		}
+	}()
+
+	go func() {
+		for {
+			host :=<- raft.ReplicatedLog.SendSnapshotToSystemSignal
+			raft.ReplicatedLog.SendSnapshotToSystemSignal <- host
+		}
+	}()
+}
+
+func (raft *RaftService[T, U, V, W]) InitStats() error {
+	initStatObj, calcErr := stats.CalculateCurrentStats[T]()
+	if calcErr != nil {
+		Log.Error("unable to get calculate stats for mount", calcErr)
+		return calcErr
+	}
+
+	statSetErr := raft.CurrentSystem.WAL.SetStat(*initStatObj)
+	if statSetErr != nil {
+		Log.Error("unable to get set stats in bucket", statSetErr)
+		return statSetErr
+	}
+
+	return nil
 }

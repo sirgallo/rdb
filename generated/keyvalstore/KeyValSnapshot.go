@@ -20,7 +20,7 @@ func SnapshotKeyValStore(sm *KeyValStateMachine, opts snapshot.SnapshotHandlerOp
 		}
 
 		kvPair, err := utils.EncodeStructToString[KeyValPair](keyValPair)
-		if err != nil { Log.Debug("error encoding log struct to string") }
+		if err != nil { Log.Error("error encoding log struct to string") }
 
 		keyValPairs = append(keyValPairs, kvPair)
 

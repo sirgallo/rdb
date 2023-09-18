@@ -29,6 +29,9 @@ func (rlService *ReplicatedLogService[T]) SyncLogs(host string) (bool, error) {
 	}
 
 	for {
+		earliestLog, earliestErr := rlService.CurrentSystem.WAL.GetEarliest()
+		if earliestErr != nil { return false, earliestErr }
+
 		preparedEntries, prepareErr := rlService.PrepareAppendEntryRPC(sys.NextIndex, false)
 		if prepareErr != nil { return false, prepareErr }
 
@@ -44,6 +47,9 @@ func (rlService *ReplicatedLogService[T]) SyncLogs(host string) (bool, error) {
 			sys.SetStatus(system.Ready)
 			rlService.ConnectionPool.PutConnection(sys.Host, conn)
 
+			return true, nil
+		} else if earliestLog != nil && sys.NextIndex < earliestLog.Index {
+			rlService.SendSnapshotToSystemSignal <- sys.Host
 			return true, nil
 		}
 	}

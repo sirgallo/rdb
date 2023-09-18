@@ -29,7 +29,10 @@ func NewReplicatedLogService [T log.MachineCommands](opts *ReplicatedLogOpts[T])
 		LogApplyChan: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
-		SignalSnapshot: make(chan bool),
+		SignalStartSnapshot: make(chan bool),
+		SignalCompleteSnapshot: make(chan bool),
+		PauseReplogSignal: make(chan bool),
+		SendSnapshotToSystemSignal: make(chan string),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -72,8 +75,10 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 
 func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
-	timeoutChan := make(chan bool)
 	
+	timeoutChan := make(chan bool)
+	unpauseReplogSignal := make(chan bool, 1)
+
 	go func() {
 		for {
 			select {
@@ -88,8 +93,22 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 
 	go func() {
 		for {
-			newCmd :=<- rlService.AppendLogSignal
-			if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
+			<- rlService.SignalCompleteSnapshot
+			rlService.Log.Info("snapshot process completed")
+			unpauseReplogSignal <- true
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+				case <- rlService.PauseReplogSignal:
+					rlService.Log.Info("pausing replicated log")
+					<- unpauseReplogSignal
+					rlService.Log.Info("unpausing replicated log")
+				case newCmd :=<- rlService.AppendLogSignal:
+					if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
+			}
 		}
 	}()
 

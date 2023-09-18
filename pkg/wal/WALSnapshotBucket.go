@@ -1,6 +1,7 @@
 package wal
 
 import bolt "go.etcd.io/bbolt"
+import "google.golang.org/protobuf/proto"
 
 import "github.com/sirgallo/raft/pkg/snapshotrpc"
 import "github.com/sirgallo/raft/pkg/utils"
@@ -42,10 +43,11 @@ func (wal *WAL[T]) GetSnapshot() (*snapshotrpc.Snapshot, error) {
 		val := bucket.Get(key)
 		
 		if val != nil {
-			decoded, transformErr := utils.DecodeBytesToStruct[*snapshotrpc.Snapshot](val)
-			if transformErr != nil { return transformErr }
+			decoded := &snapshotrpc.Snapshot{}
+			decodeErr := proto.Unmarshal(val, decoded)
+			if decodeErr != nil { return decodeErr }
 
-			snapshot = *decoded
+			snapshot = decoded
 		}
 
 		return nil

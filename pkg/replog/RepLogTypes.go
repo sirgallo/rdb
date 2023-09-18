@@ -42,7 +42,10 @@ type ReplicatedLogService [T log.MachineCommands] struct {
 	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
 	SyncLogChannel chan string
-	SignalSnapshot chan bool
+	SignalStartSnapshot chan bool
+	SignalCompleteSnapshot chan bool
+	PauseReplogSignal chan bool
+	SendSnapshotToSystemSignal chan string
 
 	Log clog.CustomLog
 }

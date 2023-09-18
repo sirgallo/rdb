@@ -1,18 +1,14 @@
 package replog
 
 import "errors"
-import "sync"
 
 import "github.com/sirgallo/raft/pkg/log"
-import "github.com/sirgallo/raft/pkg/snapshot"
+import "github.com/sirgallo/raft/pkg/stats"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== RepLog Commit
-
-
-var applyMutex sync.Mutex
 
 
 /*
@@ -64,9 +60,34 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 		} else { rlService.CurrentSystem.LastApplied = int64(completeLog.LogEntry.Index) }
 	}
 
-	if rlService.CurrentSystem.LastApplied >= snapshot.SnapshotTriggerAppliedIndex && rlService.CurrentSystem.State == system.Leader {
-		rlService.SignalSnapshot <- true
-		<- rlService.SignalSnapshot
+	bucketSizeInBytes, getSizeErr := rlService.CurrentSystem.WAL.GetBucketSizeInBytes()
+	if getSizeErr != nil { 
+		rlService.Log.Error("error fetching bucket size:", getSizeErr)
+		return getSizeErr
+	}
+
+	triggerSnapshot := func() bool { 
+		statsArr, getStatsErr := rlService.CurrentSystem.WAL.GetStats()
+		if statsArr == nil || getStatsErr != nil { return false }
+
+		latestObj := statsArr[len(statsArr) - 1]
+		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / 4
+
+		lastAppliedAtThreshold := bucketSizeInBytes >= thresholdInBytes
+		return lastAppliedAtThreshold && rlService.CurrentSystem.State == system.Leader
+	}()
+
+
+
+	if triggerSnapshot {
+		go func () { rlService.SignalStartSnapshot <- true }()
+		go func () { rlService.PauseReplogSignal <- true }()
+
+		statObj, calcErr := stats.CalculateCurrentStats[T]()
+		if calcErr != nil { return calcErr }
+
+		setErr := rlService.CurrentSystem.WAL.SetStat(*statObj)
+		if setErr != nil { return setErr }
 	}
 
 	return nil

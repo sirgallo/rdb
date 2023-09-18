@@ -25,9 +25,11 @@ func NewSnapshotService[T log.MachineCommands, U statemachine.Action, V statemac
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		SnapshotSignal: make(chan bool),
+		SnapshotStartSignal: make(chan bool),
+		SnapshotCompleteSignal: make(chan bool),
+		UpdateSnapshotForSystemSignal: make(chan string),
+		StateMachine: opts.StateMachine,
 		SnapshotHandler: opts.SnapshotHandler,
-		// SnapshotReplayer: opts.SnapshotReplayer,
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -35,9 +37,9 @@ func NewSnapshotService[T log.MachineCommands, U statemachine.Action, V statemac
 }
 
 /*
-	start the replicated log module/service:
-		--> launch the grpc server for AppendEntryRPC
-		--> start the leader election timeout
+	start the snapshot service:
+		--> launch the grpc server for SnapshotRPC
+		--> start the start the snapshot listener
 */
 
 func (snpService *SnapshotService[T, U, V, W]) StartSnapshotService(listener *net.Listener) {
@@ -49,13 +51,27 @@ func (snpService *SnapshotService[T, U, V, W]) StartSnapshotService(listener *ne
 		err := srv.Serve(*listener)
 		if err != nil { snpService.Log.Error("Failed to serve:", err.Error()) }
 	}()
+
+	snpService.StartSnapshotListener()
 }
 
 func (snpService *SnapshotService[T, U, V, W]) StartSnapshotListener() {
 	go func() {
 		for {
-			<- snpService.SnapshotSignal
-			if snpService.CurrentSystem.State == system.Leader { snpService.Snapshot() }
+			<- snpService.SnapshotStartSignal
+			if snpService.CurrentSystem.State == system.Leader { 
+				snpService.Snapshot() 
+				snpService.SnapshotCompleteSignal <- true
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			host :=<- snpService.UpdateSnapshotForSystemSignal
+			if snpService.CurrentSystem.State == system.Leader {
+				go snpService.UpdateIndividualSystem(host)
+			}
 		}
 	}()
 }

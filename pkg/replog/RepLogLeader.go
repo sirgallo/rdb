@@ -166,7 +166,8 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 	repLogWG.Add(1)
 	go func() {
 		defer repLogWG.Done()
-		rlService.broadcastAppendEntryRPC(requests, rlRespChans)
+		broadcastErr := rlService.broadcastAppendEntryRPC(requests, rlRespChans)
+		if broadcastErr != nil { rlService.Log.Error("error on broadcast AppendEntryRPC", broadcastErr) }
 	}()
 
 	repLogWG.Wait()
@@ -196,12 +197,12 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 						--> sync the follower up to the leader for any inconsistent log entries
 */
 
-func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) {
+func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) error {
 	defer close(*rlRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
+	
 	var appendEntryWG sync.WaitGroup
 
 	for _, req := range requestsPerHost {
@@ -248,6 +249,8 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 	}
 
 	appendEntryWG.Wait()
+
+	return nil
 }
 
 /*

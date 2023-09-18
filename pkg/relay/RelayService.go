@@ -64,14 +64,20 @@ func (rService *RelayService[T]) RelayListener() {
 	
 	go func() {
 		cmd :=<- failedBuffer
-		rService.RelayedAppendLogSignal <- cmd
+		if rService.CurrentSystem.State == system.Follower {
+			rService.RelayChannel <- cmd
+		} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- cmd }
 	}()
 
 	go func() {
 		for {
 			cmd :=<- rService.RelayChannel
-			_, err := rService.RelayClientRPC(cmd)
-			if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry") }
+			if rService.CurrentSystem.State == system.Follower {
+				_, err := rService.RelayClientRPC(cmd)
+				if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry") }
+			} else if rService.CurrentSystem.State == system.Leader {
+				rService.RelayedAppendLogSignal <- cmd
+			}
 		}
 	}()
 }
@@ -178,9 +184,9 @@ func (rService *RelayService[T]) RelayRPC(ctx context.Context, req *relayrpc.Rel
 		return failedResp, decErr
 	}
 
-	if rService.CurrentSystem.State != system.Leader { 
+	if rService.CurrentSystem.State == system.Follower { 
 		rService.RelayChannel <- *cmd 
-	} else { rService.RelayedAppendLogSignal <- *cmd }
+	} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- *cmd }
 
 	successResp := &relayrpc.RelayResponse{ ProcessedRequest: true }
 	return successResp, nil

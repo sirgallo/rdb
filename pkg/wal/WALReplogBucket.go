@@ -182,6 +182,39 @@ func (wal *WAL[T]) GetLatest() (*log.LogEntry[T], error) {
 }
 
 /*
+	Get Earliest
+		create a read transaction for getting the latest entry in the bucket
+			1.) get the current bucket
+			2.) create a cursor for the bucket and point at the first element in the bucket
+			3.) transform the value from byte array to entry and return the entry
+*/
+func (wal *WAL[T]) GetEarliest() (*log.LogEntry[T], error) {
+	var earliestLog *log.LogEntry[T]
+
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Bucket)
+		bucket := tx.Bucket(bucketName)
+
+		cursor := bucket.Cursor()
+		_, val := cursor.First()
+		
+		if val != nil { 
+			entry, transformErr := log.TransformBytesToLogEntry[T](val)
+			if transformErr != nil { return transformErr }
+	
+			earliestLog = entry
+		} else { earliestLog = nil }
+
+		return nil
+	}
+	
+	readErr := wal.DB.View(transaction)
+	if readErr != nil { return nil, readErr }
+
+	return earliestLog, nil
+}
+
+/*
 	Get Total
 		create a read transaction for getting total keys in the bucket
 			1.) get the current bucket
@@ -212,6 +245,39 @@ func (wal *WAL[T]) GetTotal(startIndex int64, endIndex int64) (int, error) {
 	if readErr != nil { return 0, readErr }
 
 	return totalKeys, nil
+}
+
+/*
+	Get Total
+		create a read transaction for getting total keys in the bucket
+			1.) get the current bucket
+			2.) create a cursor for the bucket
+			3.) start from the first element in the bucket and iterate, monotonically increasing
+				the total keys
+			4.) return total keys
+*/
+
+func (wal *WAL[T]) GetBucketSizeInBytes() (int64, error) {
+	totalSize := int64(0)
+
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Bucket)
+		bucket := tx.Bucket(bucketName)
+
+		cursor := bucket.Cursor()
+		
+		for key, val := cursor.First(); key != nil; key, val = cursor.Next() {
+			keyAndValSize := int64(len(key)) + int64(len(val))
+			totalSize += keyAndValSize
+		}
+
+		return nil
+	}
+
+	getSizeErr := wal.DB.View(transaction)
+	if getSizeErr != nil { return 0, getSizeErr }
+
+	return totalSize, nil
 }
 
 func (wal *WAL[T]) DeleteLogs(endIndex int64) error {

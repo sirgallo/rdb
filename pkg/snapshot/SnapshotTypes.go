@@ -11,12 +11,6 @@ import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-type Snapshot [T statemachine.State] struct {
-	LastIncludedIndex int64
-	LastIncludedTerm int64
-	StateMachineState T
-}
-
 type SnapshotHandlerOpts struct {
 	LastIncludedIndex int64
 	LastIncludedTerm int64
@@ -42,7 +36,9 @@ type SnapshotService [T log.MachineCommands, U statemachine.Action, V statemachi
 	Systems *sync.Map
 
 	StateMachine *statemachine.StateMachine[U, V, W]
-	SnapshotSignal chan bool
+	SnapshotStartSignal chan bool
+	SnapshotCompleteSignal chan bool
+	UpdateSnapshotForSystemSignal chan string
 	SnapshotHandler func(sm *statemachine.StateMachine[U, V, W], opts SnapshotHandlerOpts) (*snapshotrpc.Snapshot, error)
 	// SnapshotReplayer func(sm *statemachine.StateMachine[U, V, W]) (bool, error)
 
@@ -51,4 +47,4 @@ type SnapshotService [T log.MachineCommands, U statemachine.Action, V statemachi
 
 const NAME = "Snapshot"
 const RPCTimeout = 200 * time.Millisecond
-const SnapshotTriggerAppliedIndex = 200000
+const SnapshotTriggerAppliedIndex = 10000
