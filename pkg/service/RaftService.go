@@ -193,7 +193,7 @@ func (raft *RaftService[T, U, V, W]) UpdateRepLogOnStartup() (bool, error) {
 		applyErr := raft.ReplicatedLog.ApplyLogs()
 		if applyErr != nil { return false, applyErr }
 
-		total, totalErr := raft.CurrentSystem.WAL.GetTotal(int64(0), lastLog.Index)
+		total, totalErr := raft.CurrentSystem.WAL.GetTotal()
 		if totalErr != nil { return false , totalErr }
 
 		Log.Info("total entries on startup:", total)

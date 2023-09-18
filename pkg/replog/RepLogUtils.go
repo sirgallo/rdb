@@ -72,10 +72,9 @@ func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64,
 		entriesToSend, entriesErr := func() ([]*log.LogEntry[T], error) {
 			batchSize := rlService.determineBatchSize()
 
-			total, totalErr := rlService.CurrentSystem.WAL.GetTotal(nextIndex, previousLogIndex)
-			if totalErr != nil { return nil, totalErr }
+			totalToSend := nextIndex - previousLogIndex
 
-			if total <= batchSize {
+			if totalToSend <= int64(batchSize) {
 				allEntries, rangeErr := rlService.CurrentSystem.WAL.GetRange(nextIndex, lastLogIndex)
 				if rangeErr != nil { return nil, rangeErr }
 

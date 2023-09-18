@@ -37,7 +37,7 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 		totalBytesAdded := int64(len(key)) + int64(len(value))
 		totalKeysAdded := int64(1)
 
-		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, SUB)
+		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, ADD)
 		if updateErr != nil { return updateErr }
 
 		return nil
@@ -65,7 +65,7 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 		walBucket := bucket.Bucket(walBucketName)
 
 		totalBytesAdded := int64(0)
-		totalKeysAdded := int64(1)
+		totalKeysAdded := int64(0)
 
 		for _, currLog := range logs {
 			key := ConvertIntToBytes(currLog.Index)
@@ -80,7 +80,7 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 			totalKeysAdded++
 		}
 
-		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, SUB)
+		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, ADD)
 		if updateErr != nil { return updateErr }
 
 		return nil
@@ -248,75 +248,6 @@ func (wal *WAL[T]) GetEarliest() (*log.LogEntry[T], error) {
 	return earliestLog, nil
 }
 
-/*
-	Get Total
-		create a read transaction for getting total keys in the bucket
-			1.) get the current bucket
-			2.) create a cursor for the bucket
-			3.) start from the first element in the bucket and iterate, monotonically increasing
-				the total keys
-			4.) return total keys
-*/
-
-func (wal *WAL[T]) GetTotal(startIndex int64, endIndex int64) (int, error) {
-	totalKeys := 0
-	if startIndex >= endIndex { return totalKeys, nil }
-
-	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Replog)
-		bucket := tx.Bucket(bucketName)
-
-		statsBucketName := []byte(ReplogStats)
-		statsBucket := bucket.Bucket(statsBucketName)
-		
-		key := []byte(ReplogTotalElementsKey)
-		val := statsBucket.Get(key)
-		
-		totalKeys = int(ConvertBytesToInt(val))
-
-		return nil
-	}
-
-	readErr := wal.DB.View(transaction)
-	if readErr != nil { return 0, readErr }
-
-	return totalKeys, nil
-}
-
-/*
-	Get Total
-		create a read transaction for getting total keys in the bucket
-			1.) get the current bucket
-			2.) create a cursor for the bucket
-			3.) start from the first element in the bucket and iterate, monotonically increasing
-				the total keys
-			4.) return total keys
-*/
-
-func (wal *WAL[T]) GetBucketSizeInBytes() (int64, error) {
-	totalSize := int64(0)
-
-	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Replog)
-		bucket := tx.Bucket(bucketName)
-
-		statsBucketName := []byte(ReplogStats)
-		statsBucket := bucket.Bucket(statsBucketName)
-		
-		key := []byte(ReplogSizeKey)
-		val := statsBucket.Get(key)
-		
-		totalSize = ConvertBytesToInt(val)
-
-		return nil
-	}
-
-	getSizeErr := wal.DB.View(transaction)
-	if getSizeErr != nil { return 0, getSizeErr }
-
-	return totalSize, nil
-}
-
 func (wal *WAL[T]) DeleteLogs(endIndex int64) error {
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Replog)
@@ -350,6 +281,72 @@ func (wal *WAL[T]) DeleteLogs(endIndex int64) error {
 	if delErr != nil { return delErr }
 
 	return nil
+}
+
+/*
+	Get Total
+		create a read transaction for getting total keys in the bucket
+			1.) get the current bucket
+			2.) create a cursor for the bucket
+			3.) start from the first element in the bucket and iterate, monotonically increasing
+				the total keys
+			4.) return total keys
+*/
+
+func (wal *WAL[T]) GetTotal() (int, error) {
+	totalKeys := 0
+
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Replog)
+		bucket := tx.Bucket(bucketName)
+
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
+		
+		key := []byte(ReplogTotalElementsKey)
+		val := statsBucket.Get(key)
+		if val != nil { totalKeys = int(ConvertBytesToInt(val)) }
+
+		return nil
+	}
+
+	readErr := wal.DB.View(transaction)
+	if readErr != nil { return 0, readErr }
+
+	return totalKeys, nil
+}
+
+/*
+	Get Total
+		create a read transaction for getting total keys in the bucket
+			1.) get the current bucket
+			2.) create a cursor for the bucket
+			3.) start from the first element in the bucket and iterate, monotonically increasing
+				the total keys
+			4.) return total keys
+*/
+
+func (wal *WAL[T]) GetBucketSizeInBytes() (int64, error) {
+	totalSize := int64(0)
+
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Replog)
+		bucket := tx.Bucket(bucketName)
+
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
+		
+		key := []byte(ReplogSizeKey)
+		val := statsBucket.Get(key)
+		if val != nil { totalSize = ConvertBytesToInt(val) }
+
+		return nil
+	}
+
+	getSizeErr := wal.DB.View(transaction)
+	if getSizeErr != nil { return 0, getSizeErr }
+
+	return totalSize, nil
 }
 
 func (wal *WAL[T]) UpdateReplogStats(bucket *bolt.Bucket, numUpdatedBytes int64, numUpdatedKeys int64, op StatOP) error {

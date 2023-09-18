@@ -52,10 +52,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 
 	rlService.attemptLeadAckSignal()
 
-	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
-	if lastLogErr != nil { return nil, lastLogErr }
-
-	total, totalErr := rlService.CurrentSystem.WAL.GetTotal(int64(0), lastLogIndex)
+	total, totalErr := rlService.CurrentSystem.WAL.GetTotal()
 	if totalErr != nil { return nil, totalErr }
 
 	failedNextIndex, indexErr := func() (int64, error) {
@@ -80,6 +77,8 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		return rlService.generateResponse(failedNextIndex, false), nil
 	}
 
+	if (rlService.CurrentSystem.CurrentLeader != req.LeaderId) { rlService.CurrentSystem.SetCurrentLeader(req.LeaderId) }
+
 	reqTermValid, readErr := handleReqValidTermAtIndex()
 	if readErr != nil { return rlService.generateResponse(failedNextIndex, false), readErr }
 	
@@ -88,14 +87,13 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		return rlService.generateResponse(failedNextIndex, false), nil
 	}
 
-	rlService.CurrentSystem.SetCurrentLeader(req.LeaderId)
 	_, repLogErr := rlService.HandleReplicateLogs(req)
 	if repLogErr != nil { 
 		rlService.Log.Error("rep log handle error:", repLogErr.Error())
 		return rlService.generateResponse(req.PrevLogIndex, false), repLogErr
 	}
 
-	lastLogIndex, _, lastLogErr = rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
 	if lastLogErr != nil { 
 		rlService.Log.Error("error getting last log index", lastLogErr)
 		return rlService.generateResponse(req.PrevLogIndex, false), lastLogErr 
