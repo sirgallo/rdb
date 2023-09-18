@@ -81,7 +81,7 @@ func (leService *LeaderElectionService[T]) Election() error {
 	go func() {
 		defer electionWG.Done()
 		broadcastErr := leService.broadcastVotes(aliveSystems, leRespChans)
-		if broadcastErr != nil { leService.Log.Error("error on broadcast", broadcastErr) }
+		if broadcastErr != nil { leService.Log.Error("error on broadcast", broadcastErr.Error()) }
 	}()
 
 	electionWG.Wait()

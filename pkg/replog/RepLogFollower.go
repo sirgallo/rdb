@@ -91,7 +91,7 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	rlService.CurrentSystem.SetCurrentLeader(req.LeaderId)
 	_, repLogErr := rlService.HandleReplicateLogs(req)
 	if repLogErr != nil { 
-		rlService.Log.Error("rep log handle error:", repLogErr)
+		rlService.Log.Error("rep log handle error:", repLogErr.Error())
 		return rlService.generateResponse(req.PrevLogIndex, false), repLogErr
 	}
 

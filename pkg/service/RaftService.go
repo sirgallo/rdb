@@ -134,7 +134,7 @@ func (raft *RaftService[T, U, V, W]) StartRaftService() {
 
 			for _, log := range logs {
 				raft.StateMachineLogApplyChan <- log
-				applyErr := <- raft.StateMachineLogAppliedChan
+				applyErr :=<- raft.StateMachineLogAppliedChan
 
 				if applyErr != nil {
 					Log.Debug("error on op:", applyErr.Error())
@@ -297,13 +297,13 @@ func (raft *RaftService[T, U, V, W]) StartModulePassThroughs() {
 func (raft *RaftService[T, U, V, W]) InitStats() error {
 	initStatObj, calcErr := stats.CalculateCurrentStats[T]()
 	if calcErr != nil {
-		Log.Error("unable to get calculate stats for mount", calcErr)
+		Log.Error("unable to get calculate stats for path", calcErr.Error())
 		return calcErr
 	}
 
 	statSetErr := raft.CurrentSystem.WAL.SetStat(*initStatObj)
 	if statSetErr != nil {
-		Log.Error("unable to get set stats in bucket", statSetErr)
+		Log.Error("unable to get set stats in bucket", statSetErr.Error())
 		return statSetErr
 	}
 

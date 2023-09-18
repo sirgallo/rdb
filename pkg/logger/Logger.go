@@ -27,7 +27,7 @@ func (cLog *CustomLog) Debug(msg ...interface{}) {
 } 
 
 func (cLog *CustomLog) Error(msg ...interface{}) {
-	cLog.formatOutput(Info, msg)
+	cLog.formatOutput(Error, msg)
 } 
 
 func (cLog *CustomLog) Info(msg ...interface{}) {

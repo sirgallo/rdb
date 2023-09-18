@@ -25,7 +25,7 @@ func CalculateCurrentStats [T log.MachineCommands]() (*Stats, error) {
 
 	statErr := syscall.Statfs(path, &stat) 
 	if statErr != nil {
-		Log.Error("error getting disk space for", path, ":", statErr)
+		Log.Error("error getting disk space for", path, ":", statErr.Error())
 		return nil, statErr
 	}
 

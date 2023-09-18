@@ -113,14 +113,14 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 
 	appendErr := rlService.CurrentSystem.WAL.Append(newLog.Index, newLog)
 	if appendErr != nil {
-		rlService.Log.Error("append error:", appendErr)
+		rlService.Log.Error("append error:", appendErr.Error())
 		return appendErr 
 	}
 
 	for _, sys := range aliveSystems {
 		preparedEntries, prepareErr := rlService.PrepareAppendEntryRPC(sys.NextIndex, false)
 		if prepareErr != nil { 
-			rlService.Log.Error("prepare entries rpc error:", prepareErr)
+			rlService.Log.Error("prepare entries rpc error:", prepareErr.Error())
 			return prepareErr 
 		}
 
@@ -148,7 +148,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 						rlService.CurrentSystem.CommitIndex++
 						
 						applyErr := rlService.ApplyLogs()
-						if applyErr != nil { rlService.Log.Error("error applying command to state machine:", applyErr) }
+						if applyErr != nil { rlService.Log.Error("error applying command to state machine:", applyErr.Error()) }
 					} else { rlService.Log.Warn("minimum successful responses not received.") }
 					
 					return
@@ -167,7 +167,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 	go func() {
 		defer repLogWG.Done()
 		broadcastErr := rlService.broadcastAppendEntryRPC(requests, rlRespChans)
-		if broadcastErr != nil { rlService.Log.Error("error on broadcast AppendEntryRPC", broadcastErr) }
+		if broadcastErr != nil { rlService.Log.Error("error on broadcast AppendEntryRPC", broadcastErr.Error()) }
 	}()
 
 	repLogWG.Wait()

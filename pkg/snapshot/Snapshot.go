@@ -54,7 +54,7 @@ func (snpService *SnapshotService[T, U, V, W]) UpdateIndividualSystem(host strin
 
 	_, rpcErr := snpService.ClientSnapshotRPC(sys, snapshot)
 	if rpcErr != nil { 
-		snpService.Log.Error("rpc error when sending snapshot:", rpcErr)
+		snpService.Log.Error("rpc error when sending snapshot:", rpcErr.Error())
 		return rpcErr
 	}
 
@@ -77,7 +77,7 @@ func (snpService *SnapshotService[T, U, V, W]) BroadcastSnapshotRPC(snapshot *sn
 	
 			res, rpcErr := snpService.ClientSnapshotRPC(sys, snapshot)
 			if rpcErr != nil { 
-				snpService.Log.Error("rpc error when sending snapshot:", rpcErr)
+				snpService.Log.Error("rpc error when sending snapshot:", rpcErr.Error())
 				return
 			}
 
@@ -135,7 +135,7 @@ func (snpService *SnapshotService[T, U, V, W]) ClientSnapshotRPC(sys *system.Sys
 func (snpService *SnapshotService[T, U, V, W]) SnapshotRPC(ctx context.Context, req *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
 	setErr := snpService.CurrentSystem.WAL.SetSnapshot(req)
 	if setErr != nil { 
-		snpService.Log.Error("set err:", req)
+		snpService.Log.Error("set err:", setErr.Error())
 		return &snapshotrpc.SnapshotResponse{
 			Success: false,
 		}, setErr
@@ -143,7 +143,7 @@ func (snpService *SnapshotService[T, U, V, W]) SnapshotRPC(ctx context.Context, 
 
 	lastIncluded, readErr := snpService.CurrentSystem.WAL.Read(req.LastIncludedIndex)
 	if readErr != nil { 
-		snpService.Log.Error("read err:", req)
+		snpService.Log.Error("read err:", readErr.Error())
 		return &snapshotrpc.SnapshotResponse{
 			Success: false,
 		}, setErr
@@ -151,7 +151,7 @@ func (snpService *SnapshotService[T, U, V, W]) SnapshotRPC(ctx context.Context, 
 
 	delErr := snpService.CurrentSystem.WAL.DeleteLogs(lastIncluded.Index - 1)
 	if delErr != nil {
-		snpService.Log.Error("delete err:", req)
+		snpService.Log.Error("delete err:", delErr.Error())
 		return &snapshotrpc.SnapshotResponse{
 			Success: false,
 		}, delErr

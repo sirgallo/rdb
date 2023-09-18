@@ -62,7 +62,7 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 
 	bucketSizeInBytes, getSizeErr := rlService.CurrentSystem.WAL.GetBucketSizeInBytes()
 	if getSizeErr != nil { 
-		rlService.Log.Error("error fetching bucket size:", getSizeErr)
+		rlService.Log.Error("error fetching bucket size:", getSizeErr.Error())
 		return getSizeErr
 	}
 
