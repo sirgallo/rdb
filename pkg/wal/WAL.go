@@ -30,9 +30,17 @@ func NewWAL [T log.MachineCommands]() (*WAL[T], error) {
 	if openErr != nil { return nil, openErr }
 
 	replogTransaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
-		_, createErr := tx.CreateBucketIfNotExists(bucketName)
+		bucketName := []byte(Replog)
+		parent, createErr := tx.CreateBucketIfNotExists(bucketName)
 		if createErr != nil { return createErr }
+
+		walBucketName := []byte(ReplogWAL)
+		_, walCreateErr := parent.CreateBucketIfNotExists(walBucketName)
+		if walCreateErr != nil { return createErr }
+
+		statsBucketName := []byte(ReplogStats)
+		_, statsCreateErr := parent.CreateBucketIfNotExists(statsBucketName)
+		if statsCreateErr != nil { return statsCreateErr }
 
 		return nil
 	}

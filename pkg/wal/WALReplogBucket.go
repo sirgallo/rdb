@@ -1,6 +1,7 @@
 package wal
 
 import "bytes"
+
 import bolt "go.etcd.io/bbolt"
 
 import "github.com/sirgallo/raft/pkg/log"
@@ -19,16 +20,49 @@ import "github.com/sirgallo/raft/pkg/log"
 
 func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
+
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
+
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
 
 		key := ConvertIntToBytes(index)
 
 		value, transformErr := log.TransformLogEntryToBytes[T](entry)
 		if transformErr != nil { return transformErr }
 
-		putErr := bucket.Put(key, value)
+		putErr := walBucket.Put(key, value)
 		if putErr != nil { return putErr }
+
+		totalBytesAdded := int64(len(key)) + int64(len(value))
+		totalKeysAdded := int64(1)
+
+		sizeKey := []byte(ReplogSizeKey)
+		totalKey := []byte(ReplogTotalElementsKey)
+
+		var bucketSize, totalKeys int64
+		
+		sizeVal := statsBucket.Get(sizeKey)
+		if sizeVal == nil {
+			bucketSize = 0
+		} else { bucketSize = ConvertBytesToInt(sizeVal) }
+
+		totalVal := statsBucket.Get(totalKey)
+		if totalVal == nil {
+			totalKeys = 0
+		} else { totalKeys = ConvertBytesToInt(totalVal) }
+
+		newBucketSize := bucketSize + totalBytesAdded
+		newTotal := totalKeys + totalKeysAdded
+
+		putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
+		if putSizeErr != nil { return putSizeErr }
+
+		putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
+		if putTotalErr != nil { return putTotalErr }
 
 		return nil
 	}
@@ -48,8 +82,17 @@ func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
 
 func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
+
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
+
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
+
+		totalBytesAdded := int64(0)
+		totalKeysAdded := int64(1)
 
 		for _, currLog := range logs {
 			key := ConvertIntToBytes(currLog.Index)
@@ -57,9 +100,36 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 			newVal, transformErr := log.TransformLogEntryToBytes[T](currLog)
 			if transformErr != nil { return transformErr }
 	
-			putErr := bucket.Put(key, newVal)
+			putErr := walBucket.Put(key, newVal)
 			if putErr != nil { return putErr }
+
+			totalBytesAdded += int64(len(key)) + int64(len(newVal))
+			totalKeysAdded++
 		}
+
+		sizeKey := []byte(ReplogSizeKey)
+		totalKey := []byte(ReplogTotalElementsKey)
+
+		var bucketSize, totalKeys int64
+		
+		sizeVal := statsBucket.Get(sizeKey)
+		if sizeVal == nil {
+			bucketSize = 0
+		} else { bucketSize = ConvertBytesToInt(sizeVal) }
+
+		totalVal := statsBucket.Get(totalKey)
+		if totalVal == nil {
+			totalKeys = 0
+		} else { totalKeys = ConvertBytesToInt(totalVal) }
+
+		newBucketSize := bucketSize + totalBytesAdded
+		newTotal := totalKeys + totalKeysAdded
+
+		putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
+		if putSizeErr != nil { return putSizeErr }
+
+		putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
+		if putTotalErr != nil { return putTotalErr }
 
 		return nil
 	}
@@ -82,12 +152,15 @@ func (wal *WAL[T]) Read(index int64) (*log.LogEntry[T], error) {
 	var entry *log.LogEntry[T]
 	
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
+
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
 
 		key := ConvertIntToBytes(index)
 
-		val := bucket.Get(key)
+		val := walBucket.Get(key)
 		if val == nil { return nil }
 
 		incoming, transformErr := log.TransformBytesToLogEntry[T](val)
@@ -127,13 +200,16 @@ func (wal *WAL[T]) GetRange(startIndex int64, endIndex int64) ([]*log.LogEntry[T
 			return nil
 		}
 
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
+
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
 
 		startKey := ConvertIntToBytes(startIndex)
 		endKey := ConvertIntToBytes(endIndex)
 
-		cursor := bucket.Cursor()
+		cursor := walBucket.Cursor()
 
 		for key, val := cursor.Seek(startKey); key != nil && bytes.Compare(key, endKey) <= 0; key, val = cursor.Next() {
 			if val != nil { transformAndAppend(val) }
@@ -159,10 +235,13 @@ func (wal *WAL[T]) GetLatest() (*log.LogEntry[T], error) {
 	var latestEntry *log.LogEntry[T]
 
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
 
-		cursor := bucket.Cursor()
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
+
+		cursor := walBucket.Cursor()
 		_, val := cursor.Last()
 		
 		if val != nil { 
@@ -192,10 +271,13 @@ func (wal *WAL[T]) GetEarliest() (*log.LogEntry[T], error) {
 	var earliestLog *log.LogEntry[T]
 
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
 
-		cursor := bucket.Cursor()
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
+
+		cursor := walBucket.Cursor()
 		_, val := cursor.First()
 		
 		if val != nil { 
@@ -229,14 +311,16 @@ func (wal *WAL[T]) GetTotal(startIndex int64, endIndex int64) (int, error) {
 	if startIndex >= endIndex { return totalKeys, nil }
 
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
 
-		cursor := bucket.Cursor()
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
 		
-		for key, _ := cursor.First(); key != nil; key, _ = cursor.Next() {
-			totalKeys++
-		}
+		key := []byte(ReplogTotalElementsKey)
+		val := statsBucket.Get(key)
+		
+		totalKeys = int(ConvertBytesToInt(val))
 
 		return nil
 	}
@@ -261,15 +345,16 @@ func (wal *WAL[T]) GetBucketSizeInBytes() (int64, error) {
 	totalSize := int64(0)
 
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
 
-		cursor := bucket.Cursor()
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
 		
-		for key, val := cursor.First(); key != nil; key, val = cursor.Next() {
-			keyAndValSize := int64(len(key)) + int64(len(val))
-			totalSize += keyAndValSize
-		}
+		key := []byte(ReplogSizeKey)
+		val := statsBucket.Get(key)
+		
+		totalSize =ConvertBytesToInt(val)
 
 		return nil
 	}
@@ -282,17 +367,53 @@ func (wal *WAL[T]) GetBucketSizeInBytes() (int64, error) {
 
 func (wal *WAL[T]) DeleteLogs(endIndex int64) error {
 	transaction := func(tx *bolt.Tx) error {
-		bucketName := []byte(Bucket)
+		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
+
+		walBucketName := []byte(ReplogWAL)
+		walBucket := bucket.Bucket(walBucketName)
+
+		statsBucketName := []byte(ReplogStats)
+		statsBucket := bucket.Bucket(statsBucketName)
 
 		endKey := ConvertIntToBytes(endIndex)
 
-		cursor := bucket.Cursor()
+		cursor := walBucket.Cursor()
 		
-		for key, _ := cursor.First(); key != nil && bytes.Compare(key, endKey) <= 0; key, _ = cursor.Next() {
+		totalBytesRemoved := int64(0)
+		totalKeysRemoved := int64(0)
+		
+		for key, val := cursor.First(); key != nil && bytes.Compare(key, endKey) <= 0; key, val = cursor.Next() {
 			delErr := bucket.Delete(key)
 			if delErr != nil { return delErr }
+
+			totalBytesRemoved += int64(len(key)) + int64(len(val))
+			totalKeysRemoved++
 		}
+
+		sizeKey := []byte(ReplogSizeKey)
+		totalKey := []byte(ReplogTotalElementsKey)
+
+		var bucketSize, totalKeys int64
+		
+		sizeVal := statsBucket.Get(sizeKey)
+		if sizeVal == nil {
+			bucketSize = 0
+		} else { bucketSize = ConvertBytesToInt(sizeVal) }
+
+		totalVal := statsBucket.Get(totalKey)
+		if totalVal == nil {
+			totalKeys = 0
+		} else { totalKeys = ConvertBytesToInt(totalVal) }
+
+		newBucketSize := bucketSize - totalBytesRemoved
+		newTotal := totalKeys - totalKeysRemoved
+
+		putSizeErr := statsBucket.Put(sizeKey, ConvertIntToBytes(newBucketSize))
+		if putSizeErr != nil { return putSizeErr }
+
+		putTotalErr := statsBucket.Put(totalKey, ConvertIntToBytes(newTotal))
+		if putTotalErr != nil { return putTotalErr }
 
 		return nil
 	}

@@ -15,8 +15,15 @@ type WAL [T comparable] struct {
 const NAME = "WAL"
 const SubDirectory = "raft/replog"
 const FileName = "replog.db"
-const Bucket = "replog"
+
+const Replog = "replog"
+const ReplogWAL = Replog + "_wal"
+const ReplogStats = Replog + "_stats"
+const ReplogTotalElementsKey = "total"
+const ReplogSizeKey = "size"
+
 const Snapshot = "snapshot"
 const SnapshotKey = "currentsnapshot"
+
 const Stats = "stats"
 const MaxStats = 1000
