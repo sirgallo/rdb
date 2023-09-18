@@ -306,7 +306,7 @@ func (wal *WAL[T]) GetBucketSizeInBytes() (int64, error) {
 		key := []byte(ReplogSizeKey)
 		val := statsBucket.Get(key)
 		
-		totalSize =ConvertBytesToInt(val)
+		totalSize = ConvertBytesToInt(val)
 
 		return nil
 	}
