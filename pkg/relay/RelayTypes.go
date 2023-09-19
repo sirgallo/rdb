@@ -23,6 +23,7 @@ type RelayService struct {
 	relayrpc.UnimplementedRelayServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool
+	Mutex sync.Mutex
 
 	// Persistent State
 	CurrentSystem *system.System
@@ -31,12 +32,18 @@ type RelayService struct {
 	// Module Level State
 	RelayChannel chan statemachine.StateMachineOperation
 	RelayedAppendLogSignal chan statemachine.StateMachineOperation
+	RelayedResponseChannel chan statemachine.StateMachineResponse
+	ClientMappedResponseChannel map[string]*chan statemachine.StateMachineResponse
+
+	ForwardRespChannel chan statemachine.StateMachineResponse
 
 	Log clog.CustomLog
 }
 
 
 const NAME = "Relay"
-const RPCTimeout = 50 * time.Millisecond
+const RPCTimeout = 500 * time.Millisecond
 const RelayChannelBuffSize = 100000
 const FailedBuffSize = 10000
+const RelayRespBuffSize = 100000
+const ForwardRespChannel = 100000

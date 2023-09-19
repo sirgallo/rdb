@@ -5,6 +5,7 @@ import "os"
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/connpool"
+import "github.com/sirgallo/raft/pkg/httpservice"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/relay"
@@ -66,6 +67,11 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 	rConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	snpConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
+	httpOpts := &httpservice.HTTPServiceOpts{
+		Port: opts.Ports.HTTPService,
+		CurrentSystem: currentSystem,
+	}
+
 	leOpts := &leaderelection.LeaderElectionOpts{
 		Port: opts.Ports.LeaderElection,
 		ConnectionPool: leConnPool,
@@ -94,11 +100,13 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 		Systems: raft.Systems,
 	}
 
+	httpService := httpservice.NewHTTPService(httpOpts)
 	leService := leaderelection.NewLeaderElectionService(leOpts)
 	rlService := replog.NewReplicatedLogService(rlOpts)
 	rService := relay.NewRelayService(rOpts)
 	snpService := snapshot.NewSnapshotService(snpOpts)
 
+	raft.HTTPService = httpService
 	raft.LeaderElection = leService
 	raft.ReplicatedLog = rlService
 	raft.Relay = rService
@@ -164,6 +172,8 @@ func (raft *RaftService) StartModules() {
 	go raft.LeaderElection.StartLeaderElectionService(&leListener)
 	go raft.Relay.StartRelayService(&rListener)
 	go raft.Snapshot.StartSnapshotService(&snpListener)
+
+	go raft.HTTPService.StartHTTPService()
 }
 
 /*
@@ -205,10 +215,32 @@ func (raft *RaftService) StartModulePassThroughs() {
 
 	go func() {
 		for {
-			cmdEntry :=<- raft.CommandChannel
+			cmdEntry :=<- raft.HTTPService.RequestChannel
 			if raft.CurrentSystem.State == system.Leader {
 				raft.ReplicatedLog.AppendLogSignal <- cmdEntry
 			} else { raft.Relay.RelayChannel <- cmdEntry }
+		}
+	}()
+
+	go func() {
+		for {
+			response :=<- raft.ReplicatedLog.StateMachineResponseChannel
+			if raft.CurrentSystem.State == system.Leader {
+				if response.RequestOrigin == raft.CurrentSystem.Host {
+					raft.HTTPService.ResponseChannel <- response
+				} else { raft.Relay.RelayedResponseChannel <- response }
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			response :=<- raft.Relay.ForwardRespChannel
+			if raft.CurrentSystem.State == system.Follower {
+				if response.RequestOrigin == raft.CurrentSystem.Host { 
+					raft.HTTPService.ResponseChannel <- response 
+				}
+			}
 		}
 	}()
 

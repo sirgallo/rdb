@@ -8,19 +8,23 @@ import bolt "go.etcd.io/bbolt"
 type Action = string
 
 type StateMachineOpPayload struct {
-	Collection string
-	Value	string
+	Collection string `json:"collection"`
+	Value	string `json:"value"`
 }
 
 type StateMachineOperation struct {
-	Action Action
-	Payload StateMachineOpPayload
+	RequestID string `json:"-"`
+	RequestOrigin string `json:"-"`
+	Action Action `json:"action"`
+	Payload StateMachineOpPayload `json:"payload"`
 }
 
 type StateMachineResponse struct {
-	Collection string
-	Key string
-	Value string
+	RequestID string `json:"-"`
+	RequestOrigin string `json:"-"`
+	Collection string `json:"collection"`
+	Key string `json:"key"`
+	Value string `json:"value"`
 }
 
 type StateMachine struct {

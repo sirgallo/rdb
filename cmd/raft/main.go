@@ -1,14 +1,11 @@
 package main
 
 import "log"
-import "math/rand"
 import "os"
-import "time"
 
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/service"
 import "github.com/sirgallo/raft/pkg/logger"
-import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -35,6 +32,7 @@ func main() {
 	raftOpts := service.RaftServiceOpts{
 		Protocol: "tcp",
 		Ports: service.RaftPortOpts{
+			HTTPService: 8080,
 			LeaderElection: 54321,
 			ReplicatedLog: 54322,
 			Relay: 54323,
@@ -47,25 +45,6 @@ func main() {
 	raft := service.NewRaftService(raftOpts)
 
 	go raft.StartRaftService()
-
-	// simulate a client creating new commands to be applied to the state machine
-	go func() {
-		for {
-			cmdEntry := &statemachine.StateMachineOperation{
-				Action: statemachine.INSERT,
-				Payload: statemachine.StateMachineOpPayload{
-					Collection: "test",
-					Value: "hello world",
-				},
-			}
-
-			raft.CommandChannel <- *cmdEntry
-			
-			randomNumber := rand.Intn(96) + 5
-			time.Sleep(time.Duration(randomNumber) * time.Millisecond)
-			// time.Sleep(100 * time.Microsecond)
-		}
-	}()
 	
 	select{}
 }

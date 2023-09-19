@@ -3,6 +3,7 @@ package service
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/connpool"
+import "github.com/sirgallo/raft/pkg/httpservice"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/relay"
@@ -12,6 +13,7 @@ import "github.com/sirgallo/raft/pkg/system"
 
 
 type RaftPortOpts struct {
+	HTTPService int
 	LeaderElection int
 	ReplicatedLog int
 	Relay int
@@ -32,6 +34,7 @@ type RaftService struct {
 	CurrentSystem *system.System
 	Systems *sync.Map
 
+	HTTPService *httpservice.HTTPService
 	LeaderElection *leaderelection.LeaderElectionService
 	ReplicatedLog *replog.ReplicatedLogService
 	Relay *relay.RelayService

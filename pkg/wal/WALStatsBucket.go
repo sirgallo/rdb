@@ -65,12 +65,14 @@ func (wal *WAL) DeleteStats() error {
 		cursor := bucket.Cursor()
 
 		keyCount := 0
+		
 		for key, _ := cursor.First(); key != nil; key, _ = cursor.Next() {
 			keyCount++
 		}
 
 		numKeysToDelete := keyCount - MaxStats
 		totalDeleted := 0
+		
 		for key, _ := cursor.First(); key != nil; key, _ = cursor.Next() {
 			if  totalDeleted <= numKeysToDelete {
 				bucket.Delete(key)

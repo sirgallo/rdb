@@ -177,6 +177,7 @@ func (wal *WAL) GetRange(startIndex int64, endIndex int64) ([]*log.LogEntry, err
 			2.) create a cursor for the bucket and point at the last element in the bucket
 			3.) transform the value from byte array to entry and return the entry
 */
+
 func (wal *WAL) GetLatest() (*log.LogEntry, error) {
 	var latestEntry *log.LogEntry
 
@@ -213,6 +214,7 @@ func (wal *WAL) GetLatest() (*log.LogEntry, error) {
 			2.) create a cursor for the bucket and point at the first element in the bucket
 			3.) transform the value from byte array to entry and return the entry
 */
+
 func (wal *WAL) GetEarliest() (*log.LogEntry, error) {
 	var earliestLog *log.LogEntry
 

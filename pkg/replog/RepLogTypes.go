@@ -40,6 +40,7 @@ type ReplicatedLogService struct {
 	SignalCompleteSnapshot chan bool
 	PauseReplogSignal chan bool
 	SendSnapshotToSystemSignal chan string
+	StateMachineResponseChannel chan statemachine.StateMachineResponse
 
 	Log clog.CustomLog
 }
@@ -60,3 +61,4 @@ const NAME = "Replicated Log"
 const HeartbeatInterval = 50 * time.Millisecond
 const RPCTimeout = 200 * time.Millisecond
 const AppendLogBuffSize = 1000000
+const ResponseBuffSize = 100000

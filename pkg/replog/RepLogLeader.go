@@ -26,6 +26,9 @@ func (rlService *ReplicatedLogService) Heartbeat() error {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, _ := rlService.GetAliveSystemsAndMinSuccessResps()
 
+	defer close(*rlRespChans.SuccessChan)
+	defer close(*rlRespChans.HigherTermDiscovered)
+
 	requests := []ReplicatedLogRequest{}
 	successfulResps := int64(0)
 
@@ -65,13 +68,11 @@ func (rlService *ReplicatedLogService) Heartbeat() error {
 	hbWG.Add(1)
 	go func() {
 		defer hbWG.Done()
+		
 		rlService.broadcastAppendEntryRPC(requests, rlRespChans)
 	}()
 
 	hbWG.Wait()
-
-	close(*rlRespChans.SuccessChan)
-	close(*rlRespChans.HigherTermDiscovered)
 
 	return nil
 }
@@ -93,13 +94,11 @@ func (rlService *ReplicatedLogService) ReplicateLogs(cmd statemachine.StateMachi
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, minSuccessfulResps := rlService.GetAliveSystemsAndMinSuccessResps()
 
-	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
-	if lastLogErr != nil {
-		close(*rlRespChans.SuccessChan)
-		close(*rlRespChans.HigherTermDiscovered)
+	defer close(*rlRespChans.SuccessChan)
+	defer close(*rlRespChans.HigherTermDiscovered)
 
-		return lastLogErr
-	}
+	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	if lastLogErr != nil { return lastLogErr }
 
 	nextIndex := lastLogIndex + 1
 
@@ -167,14 +166,12 @@ func (rlService *ReplicatedLogService) ReplicateLogs(cmd statemachine.StateMachi
 	repLogWG.Add(1)
 	go func() {
 		defer repLogWG.Done()
+		
 		broadcastErr := rlService.broadcastAppendEntryRPC(requests, rlRespChans)
 		if broadcastErr != nil { rlService.Log.Error("error on broadcast AppendEntryRPC", broadcastErr.Error()) }
 	}()
 
 	repLogWG.Wait()
-
-	close(*rlRespChans.SuccessChan)
-	close(*rlRespChans.HigherTermDiscovered)
 
 	return nil
 }

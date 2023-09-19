@@ -4,14 +4,14 @@ import bolt "go.etcd.io/bbolt"
 import "github.com/google/uuid"
 
 
-func (sm *StateMachine) Find(payload *StateMachineOpPayload) (*StateMachineResponse, error) {
+func (sm *StateMachine) Find(op *StateMachineOperation) (*StateMachineResponse, error) {
 	var resp *StateMachineResponse
 
 	transaction := func(tx *bolt.Tx) error {
 		rootName := []byte(RootBucket)
 		root := tx.Bucket(rootName)
 
-		searchResp, searchErr := sm.searchInCollection(root, payload)
+		searchResp, searchErr := sm.searchInCollection(root, &op.Payload)
 		if searchErr != nil { return searchErr }
 
 		resp = searchResp
@@ -22,20 +22,23 @@ func (sm *StateMachine) Find(payload *StateMachineOpPayload) (*StateMachineRespo
 	findErr := sm.DB.View(transaction)
 	if findErr != nil { return nil, findErr }
 
+	resp.RequestID = op.RequestID
+	resp.RequestOrigin = op.RequestOrigin
+
 	return resp, nil
 }
 
-func (sm *StateMachine) Insert(payload *StateMachineOpPayload) (*StateMachineResponse, error) {
+func (sm *StateMachine) Insert(op *StateMachineOperation) (*StateMachineResponse, error) {
 	var resp *StateMachineResponse
 
 	transaction := func(tx *bolt.Tx) error {
 		rootName := []byte(RootBucket)
 		root := tx.Bucket(rootName)
 
-		_, createCollectionErr := sm.createCollection(root, payload.Collection)
+		_, createCollectionErr := sm.createCollection(root, op.Payload.Collection)
 		if createCollectionErr != nil { return createCollectionErr }
 
-		insertResp, insertErr := sm.insertIntoCollection(root, payload)
+		insertResp, insertErr := sm.insertIntoCollection(root, &op.Payload)
 		if insertErr != nil { return insertErr}
 
 		resp = insertResp
@@ -46,10 +49,15 @@ func (sm *StateMachine) Insert(payload *StateMachineOpPayload) (*StateMachineRes
 	insertErr := sm.DB.Update(transaction)
 	if insertErr != nil { return nil, insertErr }
 
+	resp.RequestID = op.RequestID
+	resp.RequestOrigin = op.RequestOrigin
+
 	return resp, nil
 }
 
-func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) (bool, error) {
+func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachineResponse, error) {
+	responses := []*StateMachineResponse{}
+	
 	transaction := func(tx *bolt.Tx) error {
 		rootName := []byte(RootBucket)
 		root := tx.Bucket(rootName)
@@ -58,15 +66,38 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) (bool, error) {
 			_, createCollectionErr := sm.createCollection(root, op.Payload.Collection)
 			if createCollectionErr != nil { return createCollectionErr }
 
-			if op.Action == INSERT {
-				_, insertErr := sm.insertIntoCollection(root, &op.Payload)
+			if op.Action == FIND {
+				searchResp, searchErr := sm.searchInCollection(root, &op.Payload)
+				if searchErr != nil { return searchErr }
+
+				searchResp.RequestID = op.RequestID
+				searchResp.RequestOrigin = op.RequestOrigin
+
+				responses = append(responses, searchResp)
+			} else if op.Action == INSERT {
+				insertResp, insertErr := sm.insertIntoCollection(root, &op.Payload)
 				if insertErr != nil { return insertErr}
+
+				insertResp.RequestID = op.RequestID
+				insertResp.RequestOrigin = op.RequestOrigin
+
+				responses = append(responses, insertResp)
 			} else if op.Action == DELETE {
-				_, deleteErr := sm.deleteFromCollection(root, &op.Payload)
+				deleteResp, deleteErr := sm.deleteFromCollection(root, &op.Payload)
 				if deleteErr != nil { return deleteErr }
+
+				deleteResp.RequestID = op.RequestID
+				deleteResp.RequestOrigin = op.RequestOrigin
+
+				responses = append(responses, deleteResp)
 			} else if op.Action == DROPCOLLECTION {
-				dropErr := sm.dropCollection(root, &op.Payload)
+				dropResp, dropErr := sm.dropCollection(root, &op.Payload)
 				if dropErr != nil { return dropErr }
+
+				dropResp.RequestID = op.RequestID
+				dropResp.RequestOrigin = op.RequestOrigin
+
+				responses = append(responses, dropResp)
 			}
 		}
 
@@ -74,22 +105,22 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) (bool, error) {
 	}
 
 	bulkInsertErr := sm.DB.Update(transaction)
-	if bulkInsertErr != nil { return false, bulkInsertErr }
+	if bulkInsertErr != nil { return nil, bulkInsertErr }
 
-	return true, nil
+	return responses, nil
 }
 
-func (sm *StateMachine) Delete(payload *StateMachineOpPayload) (*StateMachineResponse, error) {
+func (sm *StateMachine) Delete(op *StateMachineOperation) (*StateMachineResponse, error) {
 	var resp *StateMachineResponse
 
 	transaction := func(tx *bolt.Tx) error {
 		rootName := []byte(RootBucket)
 		root := tx.Bucket(rootName)
 
-		_, createCollectionErr := sm.createCollection(root, payload.Collection)
+		_, createCollectionErr := sm.createCollection(root, op.Payload.Collection)
 		if createCollectionErr != nil { return createCollectionErr }
 
-		deleteResp, deleteErr := sm.deleteFromCollection(root, payload)
+		deleteResp, deleteErr := sm.deleteFromCollection(root, &op.Payload)
 		if deleteErr != nil { return deleteErr }
 
 		resp = deleteResp
@@ -100,27 +131,36 @@ func (sm *StateMachine) Delete(payload *StateMachineOpPayload) (*StateMachineRes
 	deleteErr := sm.DB.Update(transaction)
 	if deleteErr != nil { return nil, deleteErr }
 
+	resp.RequestID = op.RequestID
+	resp.RequestOrigin = op.RequestOrigin
+
 	return resp, nil
 }
 
-func (sm *StateMachine) DropCollection(payload *StateMachineOpPayload) (bool, error) {
+func (sm *StateMachine) DropCollection(op *StateMachineOperation) (*StateMachineResponse, error) {
+	var resp *StateMachineResponse
+
 	transaction := func(tx *bolt.Tx) error {
 		rootName := []byte(RootBucket)
 		root := tx.Bucket(rootName)
 		
-		dropErr := sm.dropCollection(root, payload)
+		dropResp, dropErr := sm.dropCollection(root, &op.Payload)
 		if dropErr != nil { return dropErr }
 
+		resp = dropResp 
 		return nil
 	}
 
 	dropErr := sm.DB.Update(transaction)
-	if dropErr != nil { return false, dropErr }
+	if dropErr != nil { return nil, dropErr }
 
-	return true, nil
+	resp.RequestID = op.RequestID
+	resp.RequestOrigin = op.RequestOrigin
+
+	return resp, nil
 }
 
-func (sm *StateMachine) ListCollections(payload *StateMachineOpPayload) ([]string, error) {
+func (sm *StateMachine) ListCollections(op *StateMachineOperation) ([]string, error) {
 	var resp []string
 
 	transaction := func(tx *bolt.Tx) error {
@@ -194,15 +234,15 @@ func (sm *StateMachine) deleteFromCollection(bucket *bolt.Bucket, payload *State
 	return indexDelResp, nil
 }
 
-func (sm *StateMachine) dropCollection(bucket *bolt.Bucket, payload *StateMachineOpPayload) error {
+func (sm *StateMachine) dropCollection(bucket *bolt.Bucket, payload *StateMachineOpPayload) (*StateMachineResponse, error) {
 	collectionName := []byte(payload.Collection)
 	indexName := []byte(payload.Collection + IndexSuffix)
 
 	delColErr := bucket.DeleteBucket(collectionName)
-	if delColErr != nil { return delColErr }
+	if delColErr != nil { return nil, delColErr }
 
 	delIndexErr := bucket.DeleteBucket(indexName)
-	if delIndexErr != nil { return delIndexErr }
+	if delIndexErr != nil { return nil, delIndexErr }
 
 	collectionBucketName := []byte(CollectionBucket)
 	collectionBucket := bucket.Bucket(collectionBucketName)
@@ -211,12 +251,15 @@ func (sm *StateMachine) dropCollection(bucket *bolt.Bucket, payload *StateMachin
 	indexBucket := bucket.Bucket(indexBucketName)
 
 	delFromColBucketErr := collectionBucket.Delete(collectionName)
-	if delFromColBucketErr != nil { return delFromColBucketErr }
+	if delFromColBucketErr != nil { return nil, delFromColBucketErr }
 
 	delFromIndexBucketErr := indexBucket.Delete(indexBucketName)
-	if delFromIndexBucketErr != nil { return delFromIndexBucketErr }
+	if delFromIndexBucketErr != nil { return nil, delFromIndexBucketErr }
 
-	return nil
+	return &StateMachineResponse{
+		Collection: payload.Collection,
+		Value: "dropped",
+	}, nil
 }
 
 func (sm *StateMachine) searchInIndex(bucket *bolt.Bucket, payload *StateMachineOpPayload) (*StateMachineResponse, error) {

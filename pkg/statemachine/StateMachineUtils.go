@@ -20,11 +20,9 @@ func (sm *StateMachine) SnapshotStateMachine() (string, error) {
 
 	snapshotFile, fCreateErr := os.Create(snapshotPath)
 	if fCreateErr != nil { return utils.GetZero[string](), fCreateErr }
-	
 	defer snapshotFile.Close()
 
 	gzipWriter := gzip.NewWriter(snapshotFile)
-	
 	defer gzipWriter.Close()
 
 	transaction := func(tx *bolt.Tx) error {
@@ -48,12 +46,10 @@ func (sm *StateMachine) ReplaySnapshot(snapshotPath string) error {
 
 	gzippedSnapshotFile, openErr := os.Open(snapshotPath)
 	if openErr != nil { return openErr }
-	
 	defer gzippedSnapshotFile.Close()
 
 	gzipReader, gzipErr := gzip.NewReader(gzippedSnapshotFile)
 	if gzipErr != nil { return gzipErr }
-	
 	defer gzipReader.Close()
 
 	closeErr := sm.DB.Close()
@@ -64,7 +60,6 @@ func (sm *StateMachine) ReplaySnapshot(snapshotPath string) error {
 	
 	databaseFile, createFileErr := os.Create(dbPath)
 	if createFileErr != nil { return createFileErr }
-	
 	defer databaseFile.Close()
 
 	_, copyErr := io.Copy(databaseFile, gzipReader)

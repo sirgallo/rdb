@@ -35,9 +35,11 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 	sysHostPtr := &rlService.CurrentSystem.Host
 
 	transformLogEntry := func(logEntry *log.LogEntry) *replogrpc.LogEntry {
-
-		cmd, err := utils.EncodeStructToString[statemachine.StateMachineOperation](logEntry.Command)
-		if err != nil { rlService.Log.Debug("error encoding log struct to string") }
+		cmd, encErr := utils.EncodeStructToString[statemachine.StateMachineOperation](logEntry.Command)
+		if encErr != nil { 
+			rlService.Log.Error("error encoding log struct to string") 
+			return nil
+		}
 
 		return &replogrpc.LogEntry{
 			Index: logEntry.Index,
@@ -73,7 +75,6 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 
 		entriesToSend, entriesErr := func() ([]*log.LogEntry, error) {
 			batchSize := rlService.determineBatchSize()
-
 			totalToSend := nextIndex - previousLogIndex
 
 			if totalToSend <= int64(batchSize) {

@@ -1,5 +1,8 @@
 package utils
 
+import "bytes"
+import "encoding/base64"
+import "encoding/gob"
 import "encoding/json"
 
 
@@ -11,10 +14,15 @@ import "encoding/json"
 */
 
 func EncodeStructToString [T comparable](data T) (string, error) {
-	encoded, err := json.Marshal(data)
+	var buf bytes.Buffer
+  enc := gob.NewEncoder(&buf)
+	
+	err := enc.Encode(data)
 	if err != nil { return GetZero[string](), err }
 	
-	return string(encoded), nil
+	binaryData := buf.Bytes()
+	base64String := base64.StdEncoding.EncodeToString(binaryData)
+	return base64String, nil
 }
 
 /*
@@ -22,10 +30,15 @@ func EncodeStructToString [T comparable](data T) (string, error) {
 */
 
 func EncodeStructToBytes [T comparable](data T) ([]byte, error) {
-	encoded, err := json.Marshal(data)
+	var buf bytes.Buffer
+  enc := gob.NewEncoder(&buf)
+	
+	err := enc.Encode(data)
 	if err != nil { return nil, err }
+	
+	binaryData := buf.Bytes()
 
-	return encoded, nil
+	return binaryData, nil
 }
 
 /*
@@ -33,11 +46,15 @@ func EncodeStructToBytes [T comparable](data T) ([]byte, error) {
 */
 
 func DecodeStringToStruct [T comparable](encoded string) (*T, error) {
-	data := new(T)
-	err := json.Unmarshal([]byte(encoded), data)
-	if err != nil { return nil, err }
+	decodedBinaryData, binaryErr := base64.StdEncoding.DecodeString(encoded)
+	if binaryErr != nil { return nil, binaryErr }
 	
-	return data, nil
+	decodedObj := new(T)
+  dec := gob.NewDecoder(bytes.NewReader(decodedBinaryData))
+  decErr := dec.Decode(&decodedObj)
+	if decErr != nil { return nil, decErr }
+
+	return decodedObj, nil
 }
 
 /*
@@ -45,8 +62,25 @@ func DecodeStringToStruct [T comparable](encoded string) (*T, error) {
 */
 
 func DecodeBytesToStruct [T comparable](encoded []byte) (*T, error) {
+	decodedObj := new(T)
+  dec := gob.NewDecoder(bytes.NewReader(encoded))
+  decErr := dec.Decode(&decodedObj)
+	if decErr != nil { return nil, decErr }
+
+	return decodedObj, nil
+}
+
+
+func EncodeStructToJSONString [T comparable](data T) (string, error) {
+	encoded, err := json.Marshal(data)
+	if err != nil { return GetZero[string](), err }
+	
+	return string(encoded), nil
+}
+
+func DecodeJSONStringToStruct [T comparable](encoded string) (*T, error) {
 	data := new(T)
-	err := json.Unmarshal(encoded, data)
+	err := json.Unmarshal([]byte(encoded), data)
 	if err != nil { return nil, err }
 	
 	return data, nil

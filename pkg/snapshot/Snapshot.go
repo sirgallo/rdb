@@ -2,7 +2,6 @@ package snapshot
 
 import "context"
 import "errors"
-import "io/ioutil"
 import "os"
 import "sync/atomic"
 import "sync"
@@ -20,7 +19,7 @@ func (snpService *SnapshotService) Snapshot() error {
 	snapshotFile, snapshotErr := snpService.CurrentSystem.StateMachine.SnapshotStateMachine()
 	if snapshotErr != nil { return snapshotErr }
 	
-	snapshotContent, readErr := ioutil.ReadFile(snapshotFile)
+	snapshotContent, readErr := os.ReadFile(snapshotFile)
 	if readErr != nil { return readErr }
 
 	snaprpc := &snapshotrpc.Snapshot{
@@ -66,7 +65,7 @@ func (snpService *SnapshotService) UpdateIndividualSystem(host string) error {
 		return getErr 
 	}
 
-	snapshotContent, readErr := ioutil.ReadFile(snapshot.SnapshotFilePath)
+	snapshotContent, readErr := os.ReadFile(snapshot.SnapshotFilePath)
 	if readErr != nil { return readErr }
 
 	snaprpc := &snapshotrpc.Snapshot{
@@ -105,7 +104,6 @@ func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.Sn
 				return
 			}
 
-			snpService.Log.Debug("res for sys", sys.Host, ":", res)
 			if res.Success { atomic.AddInt64(&successfulResps, 1) }
 		}(sys)
 	}
@@ -157,7 +155,7 @@ func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, snapsho
 }
 
 func (snpService *SnapshotService) SnapshotRPC(ctx context.Context, req *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
-	writeErr := ioutil.WriteFile(req.SnapshotFilePath, req.Snapshot, os.ModePerm)
+	writeErr := os.WriteFile(req.SnapshotFilePath, req.Snapshot, os.ModePerm)
   if writeErr != nil { 
 		return &snapshotrpc.SnapshotResponse{
 			Success: false,

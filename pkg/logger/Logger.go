@@ -56,7 +56,7 @@ func (cLog *CustomLog) formatOutput(level LogLevel, msg []interface{}) {
 
 	encodedMsg := func() string {
 		encodeTransform := func(chunk interface{}) string {
-			encoded, _ := utils.EncodeStructToString[interface{}](chunk)
+			encoded, _ := utils.EncodeStructToJSONString[interface{}](chunk)
 			return encoded
 		}
 	

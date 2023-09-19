@@ -27,10 +27,12 @@ func NewRelayService(opts *RelayOpts) *RelayService {
 		Systems: opts.Systems,
 		RelayChannel: make(chan statemachine.StateMachineOperation, RelayChannelBuffSize),
 		RelayedAppendLogSignal: make(chan statemachine.StateMachineOperation),
+		RelayedResponseChannel: make(chan statemachine.StateMachineResponse, RelayChannelBuffSize),
+		ClientMappedResponseChannel: make(map[string]*chan statemachine.StateMachineResponse),
+		ForwardRespChannel: make(chan statemachine.StateMachineResponse, ForwardRespChannel),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
-	rService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{})
 	return rService
 }
 
@@ -75,9 +77,20 @@ func (rService *RelayService) RelayListener() {
 			if rService.CurrentSystem.State == system.Follower {
 				_, err := rService.RelayClientRPC(cmd)
 				if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry", err.Error()) }
-			} else if rService.CurrentSystem.State == system.Leader {
-				rService.RelayedAppendLogSignal <- cmd
-			}
+			} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- cmd }
+		}
+	}()
+
+	go func(){
+		for {
+			response :=<- rService.RelayedResponseChannel
+			rService.Mutex.Lock()
+			clientChannel, ok := rService.ClientMappedResponseChannel[response.RequestID]
+			rService.Mutex.Unlock()
+
+			if ok {
+				*clientChannel <- response
+			} else { rService.Log.Warn("no channel for resp associated with req uuid:", response.RequestID) }
 		}
 	}()
 }
@@ -147,6 +160,13 @@ func (rService *RelayService) RelayClientRPC(cmd statemachine.StateMachineOperat
 		return nil, err
 	}
 
+	if res.ProcessedRequest {
+		resp, decErr := utils.DecodeStringToStruct[statemachine.StateMachineResponse](res.StateMachineResponse)
+		if decErr != nil { return nil, decErr }
+
+		rService.ForwardRespChannel <- *resp
+	}
+
 	return res, nil
 }
 
@@ -186,8 +206,32 @@ func (rService *RelayService) RelayRPC(ctx context.Context, req *relayrpc.RelayR
 
 	if rService.CurrentSystem.State == system.Follower { 
 		rService.RelayChannel <- *cmd 
-	} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- *cmd }
+	} else if rService.CurrentSystem.State == system.Leader { 
+		clientResponseChannel := make(chan statemachine.StateMachineResponse)
 
-	successResp := &relayrpc.RelayResponse{ ProcessedRequest: true }
-	return successResp, nil
+		rService.Mutex.Lock()
+		rService.ClientMappedResponseChannel[cmd.RequestID] = &clientResponseChannel
+		rService.Mutex.Unlock()
+
+		rService.RelayedAppendLogSignal <- *cmd 
+		resp :=<- clientResponseChannel
+
+		delete(rService.ClientMappedResponseChannel, resp.RequestID)
+
+		strResp, encErr := utils.EncodeStructToString[statemachine.StateMachineResponse](resp)
+		if encErr != nil {
+			failedResp := &relayrpc.RelayResponse{ ProcessedRequest: false }
+			return failedResp, encErr
+		}
+
+		successResp := &relayrpc.RelayResponse{ 
+			ProcessedRequest: true,
+			StateMachineResponse: strResp,
+		}
+
+		return successResp, nil
+	}
+
+	failedResp := &relayrpc.RelayResponse{ ProcessedRequest: false }
+	return failedResp, nil
 }

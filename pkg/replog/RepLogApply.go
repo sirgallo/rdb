@@ -49,8 +49,14 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 
 	logApplyEntries := utils.Map[*log.LogEntry, *statemachine.StateMachineOperation](logsToBeApplied, transform)
 
-	_, bulkInserErr := rlService.CurrentSystem.StateMachine.BulkApply(logApplyEntries)
+	bulkApplyResps, bulkInserErr := rlService.CurrentSystem.StateMachine.BulkApply(logApplyEntries)
 	if bulkInserErr != nil { return bulkInserErr }
+
+	if rlService.CurrentSystem.State == system.Leader {
+		for _, resp := range bulkApplyResps {
+			rlService.StateMachineResponseChannel <- *resp
+		}
+	} 
 	
 	rlService.CurrentSystem.LastApplied = lastLogApplied.Index
 

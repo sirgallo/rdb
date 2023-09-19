@@ -40,7 +40,6 @@ func (wal *WAL) GetSnapshot() (*SnapshotEntry, error) {
 		key := []byte(SnapshotKey)
 
 		val := bucket.Get(key)
-		
 		if val != nil {
 			decoded, decodeErr := utils.DecodeBytesToStruct[SnapshotEntry](val)
 			if decodeErr != nil { return decodeErr }

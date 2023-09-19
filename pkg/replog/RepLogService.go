@@ -32,6 +32,7 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		SignalCompleteSnapshot: make(chan bool),
 		PauseReplogSignal: make(chan bool),
 		SendSnapshotToSystemSignal: make(chan string),
+		StateMachineResponseChannel: make(chan statemachine.StateMachineResponse, ResponseBuffSize),
 		Log: *clog.NewCustomLog(NAME),
 	}
 

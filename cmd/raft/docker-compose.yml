@@ -1,5 +1,24 @@
 version: "3"
 services:
+  raftproxy: 
+    image: haproxy-raft-img
+    container_name: haproxy_raft_cont
+    hostname: ${HOSTNAME}
+    build:
+      context: ../../
+      dockerfile: ./lb/Dockerfile.raft.lb
+    volumes:
+      - ../../certs:/certs
+    ports: 
+      - '443:443'
+    networks:
+      raft_api_network:
+    depends_on:
+      - raftsrv1
+      - raftsrv2
+      - raftsrv3
+      - raftsrv4
+      - raftsrv5
   raftsrv1:
     image: raftsrv1_img
     container_name: raftsrv1_cont
@@ -10,6 +29,7 @@ services:
     networks:
       raft_api_network:
     ports:
+      - 8080
       - 54321
       - 54322
       - 54323
@@ -27,6 +47,7 @@ services:
     networks:
       raft_api_network:
     ports:
+      - 8080
       - 54321
       - 54322
       - 54323
@@ -44,6 +65,7 @@ services:
     networks:
       raft_api_network:
     ports:
+      - 8080
       - 54321
       - 54322
       - 54323
@@ -61,6 +83,7 @@ services:
     networks:
       raft_api_network:
     ports:
+      - 8080
       - 54321
       - 54322
       - 54323
@@ -78,6 +101,7 @@ services:
     networks:
       raft_api_network:
     ports:
+      - 8080
       - 54321
       - 54322
       - 54323
