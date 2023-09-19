@@ -3,6 +3,8 @@ package statemachine
 import bolt "go.etcd.io/bbolt"
 import "github.com/google/uuid"
 
+import "github.com/sirgallo/raft/pkg/utils"
+
 
 func (sm *StateMachine) Find(op *StateMachineOperation) (*StateMachineResponse, error) {
 	var resp *StateMachineResponse
@@ -197,7 +199,7 @@ func (sm *StateMachine) insertIntoCollection(bucket *bolt.Bucket, payload *State
 	searchIndexResp, searchErr := sm.searchInIndex(bucket, payload)
 	if searchErr != nil { return nil, searchErr }
 
-	if searchIndexResp != nil { return searchIndexResp, nil }
+	if searchIndexResp.Value != utils.GetZero[string]() { return searchIndexResp, nil }
 
 	generatedKey := sm.generateKey()
 	value := []byte(payload.Value)
@@ -270,7 +272,7 @@ func (sm *StateMachine) searchInIndex(bucket *bolt.Bucket, payload *StateMachine
 	indexKey := []byte(payload.Value)
 	val := index.Get(indexKey)
 
-	if val == nil { return nil, nil }
+	if val == nil { return &StateMachineResponse{ Collection: payload.Collection }, nil }
 
 	return &StateMachineResponse{
 		Collection: payload.Collection,
