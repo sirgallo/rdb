@@ -18,27 +18,22 @@ import "github.com/sirgallo/raft/pkg/log"
 			3.) put the key and value in the bucket
 */
 
-func (wal *WAL[T]) Append(index int64, entry *log.LogEntry[T]) error {
+func (wal *WAL[T]) Append(entry *log.LogEntry[T]) error {
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
 
-		walBucketName := []byte(ReplogWAL)
-		walBucket := bucket.Bucket(walBucketName)
+		latestIndexedLog, getIndexErr := wal.getLatestIndexedEntry(bucket)
+		if getIndexErr != nil { return getIndexErr}
 
-		key := ConvertIntToBytes(index)
-
-		value, transformErr := log.TransformLogEntryToBytes[T](entry)
-		if transformErr != nil { return transformErr }
-
-		putErr := walBucket.Put(key, value)
-		if putErr != nil { return putErr }
-
-		totalBytesAdded := int64(len(key)) + int64(len(value))
-		totalKeysAdded := int64(1)
+		totalBytesAdded, totalKeysAdded, appendErr := wal.appendHelper(bucket, entry)
+		if appendErr != nil { return appendErr }
 
 		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, ADD)
 		if updateErr != nil { return updateErr }
+
+		_, setIndexErr := wal.setIndexForFirstLogInTerm(bucket, entry, latestIndexedLog)
+		if setIndexErr != nil { return setIndexErr }
 
 		return nil
 	}
@@ -61,23 +56,22 @@ func (wal *WAL[T]) RangeAppend(logs []*log.LogEntry[T]) error {
 		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
 
-		walBucketName := []byte(ReplogWAL)
-		walBucket := bucket.Bucket(walBucketName)
+		latestIndexedLog, getIndexErr := wal.getLatestIndexedEntry(bucket)
+		if getIndexErr != nil { return getIndexErr}
 
 		totalBytesAdded := int64(0)
 		totalKeysAdded := int64(0)
 
 		for _, currLog := range logs {
-			key := ConvertIntToBytes(currLog.Index)
-		
-			newVal, transformErr := log.TransformLogEntryToBytes[T](currLog)
-			if transformErr != nil { return transformErr }
-	
-			putErr := walBucket.Put(key, newVal)
-			if putErr != nil { return putErr }
+			entrySize, keyToAdd, appendErr := wal.appendHelper(bucket, currLog)
+			if appendErr != nil { return appendErr }
+			
+			totalBytesAdded += entrySize
+			totalKeysAdded += keyToAdd
 
-			totalBytesAdded += int64(len(key)) + int64(len(newVal))
-			totalKeysAdded++
+			newIndexedEntry, setIndexErr := wal.setIndexForFirstLogInTerm(bucket, currLog, latestIndexedLog)
+			if setIndexErr != nil { return setIndexErr }
+			if newIndexedEntry != nil { latestIndexedLog = newIndexedEntry }
 		}
 
 		updateErr := wal.UpdateReplogStats(bucket, totalBytesAdded, totalKeysAdded, ADD)
@@ -385,4 +379,88 @@ func (wal *WAL[T]) UpdateReplogStats(bucket *bolt.Bucket, numUpdatedBytes int64,
 	if putTotalErr != nil { return putTotalErr }
 
 	return nil
+}
+
+func (wal *WAL[T]) GetIndexedEntryForTerm(term int64) (*log.LogEntry[T], error) {
+	var indexedEntry *log.LogEntry[T]
+
+	transaction := func(tx *bolt.Tx) error {
+		bucketName := []byte(Replog)
+		bucket := tx.Bucket(bucketName)
+
+		indexBucketName := []byte(ReplogIndex)
+		indexBucket := bucket.Bucket(indexBucketName)
+		
+		key := ConvertIntToBytes(term)
+		val := indexBucket.Get(key)
+		if val != nil { 
+			entry, transformErr := log.TransformBytesToLogEntry[T](val)
+			if transformErr != nil { return transformErr }
+	
+			indexedEntry = entry
+		} else { indexedEntry = nil }
+
+		return nil
+	}
+
+	getIndexErr := wal.DB.View(transaction)
+	if getIndexErr != nil { return nil, getIndexErr }
+
+	return indexedEntry, nil
+}
+
+func (wal *WAL[T]) appendHelper(bucket *bolt.Bucket, entry *log.LogEntry[T]) (int64, int64, error) {
+	walBucketName := []byte(ReplogWAL)
+	walBucket := bucket.Bucket(walBucketName)
+
+	key := ConvertIntToBytes(entry.Index)
+
+	value, transformErr := log.TransformLogEntryToBytes[T](entry)
+	if transformErr != nil { return 0, 0, transformErr }
+
+	putErr := walBucket.Put(key, value)
+	if putErr != nil { return 0, 0, putErr }
+
+	totalBytesAdded := int64(len(key)) + int64(len(value))
+	totalKeysAdded := int64(1)
+
+	return totalBytesAdded, totalKeysAdded, nil
+}
+
+func (wal *WAL[T]) getLatestIndexedEntry(bucket *bolt.Bucket) (*log.LogEntry[T], error) {
+	indexBucketName := []byte(ReplogIndex)
+	indexBucket := bucket.Bucket(indexBucketName)
+
+	cursor := indexBucket.Cursor()
+	_, val := cursor.Last()
+	if val == nil { 
+		return &log.LogEntry[T]{
+			Index: 0,
+			Term: 0,
+		}, nil 
+	}
+
+	entry, transformErr := log.TransformBytesToLogEntry[T](val)
+	if transformErr != nil { return nil, transformErr }
+
+	return entry, nil
+}
+
+func (wal *WAL[T]) setIndexForFirstLogInTerm(bucket *bolt.Bucket, newEntry *log.LogEntry[T], previousIndexed *log.LogEntry[T]) (*log.LogEntry[T], error) {
+	if newEntry.Term > previousIndexed.Term {
+		indexBucketName := []byte(ReplogIndex)
+		indexBucket := bucket.Bucket(indexBucketName)
+
+		key := ConvertIntToBytes(newEntry.Term)
+		
+		entryAsBytes, transformErr := log.TransformLogEntryToBytes[T](newEntry)
+		if transformErr != nil { return nil, transformErr }
+		
+		setErr := indexBucket.Put(key, entryAsBytes)
+		if setErr != nil { return nil, setErr }
+
+		return newEntry, nil
+	}
+
+	return nil, nil
 }

@@ -55,12 +55,24 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	total, totalErr := rlService.CurrentSystem.WAL.GetTotal()
 	if totalErr != nil { return nil, totalErr }
 
-	failedNextIndex, indexErr := func() (int64, error) {
-		if total == 0 || req.PrevLogIndex - 1 < 0 { return 0, nil }
-		return req.PrevLogIndex - 1, nil
+	latestKnownLogTerm := int64(0)
+
+	lastLog, getLastLogErr := rlService.CurrentSystem.WAL.GetLatest()
+	if getLastLogErr != nil { return nil, getLastLogErr }
+	if lastLog != nil { latestKnownLogTerm = lastLog.Term }
+	
+	failedIndexToFetch := req.PrevLogIndex - 1
+
+	lastIndexedLog, lastIndexedErr := rlService.CurrentSystem.WAL.GetIndexedEntryForTerm(latestKnownLogTerm)
+	if lastIndexedErr != nil { return nil, lastIndexedErr }
+	if lastIndexedLog != nil { failedIndexToFetch = lastIndexedLog.Index }
+
+	failedNextIndex, failedIndexErr := func() (int64, error) {
+		if total == 0 || failedIndexToFetch < 0 { return 0, nil }
+		return failedIndexToFetch, nil
 	}()
 
-	if indexErr != nil { return nil, indexErr}
+	if failedIndexErr != nil { return nil, failedIndexErr }
 
 	handleReqTerm := func() bool { return req.Term >= rlService.CurrentSystem.CurrentTerm }
 	handleReqValidTermAtIndex := func() (bool, error) {
@@ -90,13 +102,13 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 	_, repLogErr := rlService.HandleReplicateLogs(req)
 	if repLogErr != nil { 
 		rlService.Log.Error("rep log handle error:", repLogErr.Error())
-		return rlService.generateResponse(req.PrevLogIndex, false), repLogErr
+		return rlService.generateResponse(failedNextIndex, false), repLogErr
 	}
 
 	lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
 	if lastLogErr != nil { 
 		rlService.Log.Error("error getting last log index", lastLogErr)
-		return rlService.generateResponse(req.PrevLogIndex, false), lastLogErr 
+		return rlService.generateResponse(failedNextIndex, false), lastLogErr 
 	}
 
 	nextLogIndex := lastLogIndex + 1

@@ -111,7 +111,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 		Command: cmd,
 	}
 
-	appendErr := rlService.CurrentSystem.WAL.Append(newLog.Index, newLog)
+	appendErr := rlService.CurrentSystem.WAL.Append(newLog)
 	if appendErr != nil {
 		rlService.Log.Error("append error:", appendErr.Error())
 		return appendErr 

@@ -20,6 +20,7 @@ const FileName = "replog.db"
 const Replog = "replog"
 const ReplogWAL = Replog + "_wal"
 const ReplogStats = Replog + "_stats"
+const ReplogIndex = Replog + "_index"
 const ReplogTotalElementsKey = "total"
 const ReplogSizeKey = "size"
 

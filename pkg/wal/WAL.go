@@ -42,6 +42,10 @@ func NewWAL [T log.MachineCommands]() (*WAL[T], error) {
 		_, statsCreateErr := parent.CreateBucketIfNotExists(statsBucketName)
 		if statsCreateErr != nil { return statsCreateErr }
 
+		indexBucketName := []byte(ReplogIndex)
+		_, indexCreateErr := parent.CreateBucketIfNotExists(indexBucketName)
+		if indexCreateErr != nil { return indexCreateErr }
+
 		return nil
 	}
 
