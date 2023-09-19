@@ -2,27 +2,41 @@ package snapshot
 
 import "context"
 import "errors"
+import "io/ioutil"
+import "os"
 import "sync/atomic"
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/snapshotrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
+import "github.com/sirgallo/raft/pkg/wal"
 
 
-func (snpService *SnapshotService[T, U, V, W]) Snapshot() error {
+func (snpService *SnapshotService) Snapshot() error {
 	lastAppliedLog, readErr := snpService.CurrentSystem.WAL.Read(snpService.CurrentSystem.LastApplied)
 	if readErr != nil { return readErr }
 
-	retOpts := &SnapshotHandlerOpts{
-		LastIncludedIndex: lastAppliedLog.Index,
-		LastIncludedTerm: lastAppliedLog.Term,
-	}
-
-	snaprpc, snapshotErr := snpService.SnapshotHandler(snpService.StateMachine, *retOpts)
+	snapshotFile, snapshotErr := snpService.CurrentSystem.StateMachine.SnapshotStateMachine()
 	if snapshotErr != nil { return snapshotErr }
 	
-	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snaprpc)
+	snapshotContent, readErr := ioutil.ReadFile(snapshotFile)
+	if readErr != nil { return readErr }
+
+	snaprpc := &snapshotrpc.Snapshot{
+		LastIncludedIndex: lastAppliedLog.Index,
+		LastIncludedTerm: lastAppliedLog.Term,
+		SnapshotFilePath: snapshotFile,
+		Snapshot: snapshotContent,
+	}
+
+	snapshotEntry := &wal.SnapshotEntry{
+		LastIncludedIndex: lastAppliedLog.Index,
+		LastIncludedTerm: lastAppliedLog.Term,
+		SnapshotFilePath: snapshotFile,
+	}
+
+	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snapshotEntry)
 	if setErr != nil { return setErr }
 
 	ok, rpcErr := snpService.BroadcastSnapshotRPC(snaprpc)
@@ -38,9 +52,9 @@ func (snpService *SnapshotService[T, U, V, W]) Snapshot() error {
 	return nil
 }
 
-func (snpService *SnapshotService[T, U, V, W]) UpdateIndividualSystem(host string) error {
+func (snpService *SnapshotService) UpdateIndividualSystem(host string) error {
 	s, _ := snpService.Systems.Load(host)
-	sys := s.(*system.System[T])
+	sys := s.(*system.System)
 
 	sys.SetStatus(system.Busy)
 
@@ -52,7 +66,17 @@ func (snpService *SnapshotService[T, U, V, W]) UpdateIndividualSystem(host strin
 		return getErr 
 	}
 
-	_, rpcErr := snpService.ClientSnapshotRPC(sys, snapshot)
+	snapshotContent, readErr := ioutil.ReadFile(snapshot.SnapshotFilePath)
+	if readErr != nil { return readErr }
+
+	snaprpc := &snapshotrpc.Snapshot{
+		LastIncludedIndex: snapshot.LastIncludedIndex,
+		LastIncludedTerm: snapshot.LastIncludedTerm,
+		SnapshotFilePath: snapshot.SnapshotFilePath,
+		Snapshot: snapshotContent,
+	}
+
+	_, rpcErr := snpService.ClientSnapshotRPC(sys, snaprpc)
 	if rpcErr != nil { 
 		snpService.Log.Error("rpc error when sending snapshot:", rpcErr.Error())
 		return rpcErr
@@ -64,7 +88,7 @@ func (snpService *SnapshotService[T, U, V, W]) UpdateIndividualSystem(host strin
 	return nil
 }
 
-func (snpService *SnapshotService[T, U, V, W]) BroadcastSnapshotRPC(snapshot *snapshotrpc.Snapshot) (bool, error) {
+func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.Snapshot) (bool, error) {
 	aliveSystems, minResps := snpService.GetAliveSystemsAndMinSuccessResps()
 	successfulResps := int64(0)
 
@@ -72,7 +96,7 @@ func (snpService *SnapshotService[T, U, V, W]) BroadcastSnapshotRPC(snapshot *sn
 
 	for _, sys := range aliveSystems {
 		snapshotWG.Add(1)
-		go func (sys *system.System[T]) {
+		go func (sys *system.System) {
 			defer snapshotWG.Done()
 	
 			res, rpcErr := snpService.ClientSnapshotRPC(sys, snapshot)
@@ -97,7 +121,7 @@ func (snpService *SnapshotService[T, U, V, W]) BroadcastSnapshotRPC(snapshot *sn
 	}
 }
 
-func (snpService *SnapshotService[T, U, V, W]) ClientSnapshotRPC(sys *system.System[T], snapshot *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
+func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, snapshot *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
 	conn, connErr := snpService.ConnectionPool.GetConnection(sys.Host, snpService.Port)
 	if connErr != nil {
 		snpService.Log.Error("Failed to connect to", sys.Host + snpService.Port, ":", connErr.Error())
@@ -132,8 +156,22 @@ func (snpService *SnapshotService[T, U, V, W]) ClientSnapshotRPC(sys *system.Sys
 	return res, nil
 }
 
-func (snpService *SnapshotService[T, U, V, W]) SnapshotRPC(ctx context.Context, req *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
-	setErr := snpService.CurrentSystem.WAL.SetSnapshot(req)
+func (snpService *SnapshotService) SnapshotRPC(ctx context.Context, req *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
+	writeErr := ioutil.WriteFile(req.SnapshotFilePath, req.Snapshot, os.ModePerm)
+  if writeErr != nil { 
+		return &snapshotrpc.SnapshotResponse{
+			Success: false,
+		}, writeErr 
+	}
+
+	snapshotEntry := &wal.SnapshotEntry{
+		LastIncludedIndex: req.LastIncludedIndex,
+		LastIncludedTerm: req.LastIncludedTerm,
+		SnapshotFilePath: req.SnapshotFilePath,
+	}
+
+	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snapshotEntry)
+	
 	if setErr != nil { 
 		snpService.Log.Error("set err:", setErr.Error())
 		return &snapshotrpc.SnapshotResponse{

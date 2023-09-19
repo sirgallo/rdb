@@ -7,7 +7,6 @@ ENV HOME /home
 WORKDIR $HOME/raft
 
 COPY pkg ./pkg
-COPY adjunct ./adjunct
 COPY cmd ./cmd
 COPY go.mod \
   go.sum ./

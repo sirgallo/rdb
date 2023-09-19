@@ -5,10 +5,16 @@ import "sync"
 import bolt "go.etcd.io/bbolt"
 
 
-type WAL [T comparable] struct {
+type WAL struct {
 	Mutex sync.Mutex
 	DBFile string
 	DB *bolt.DB
+}
+
+type SnapshotEntry struct {
+	LastIncludedIndex int64
+	LastIncludedTerm int64
+	SnapshotFilePath string
 }
 
 type StatOP = string

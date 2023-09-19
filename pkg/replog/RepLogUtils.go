@@ -3,6 +3,7 @@ package replog
 
 import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -18,7 +19,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 		maybe find a way to get latest network MB/s and avg log size and determine based on this
 */
 
-func (rlService *ReplicatedLogService[T]) determineBatchSize() int {
+func (rlService *ReplicatedLogService) determineBatchSize() int {
 	return 10000
 }
 
@@ -30,11 +31,12 @@ func (rlService *ReplicatedLogService[T]) determineBatchSize() int {
 		--> create the rpc request from the Log Entry
 */
 
-func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64, isHeartbeat bool) (*replogrpc.AppendEntry, error) {
+func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, isHeartbeat bool) (*replogrpc.AppendEntry, error) {
 	sysHostPtr := &rlService.CurrentSystem.Host
 
-	transformLogEntry := func(logEntry *log.LogEntry[T]) *replogrpc.LogEntry {
-		cmd, err := utils.EncodeStructToString[T](logEntry.Command)
+	transformLogEntry := func(logEntry *log.LogEntry) *replogrpc.LogEntry {
+
+		cmd, err := utils.EncodeStructToString[statemachine.StateMachineOperation](logEntry.Command)
 		if err != nil { rlService.Log.Debug("error encoding log struct to string") }
 
 		return &replogrpc.LogEntry{
@@ -69,7 +71,7 @@ func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64,
 			previousLogTerm = utils.GetZero[int64]()
 		}
 
-		entriesToSend, entriesErr := func() ([]*log.LogEntry[T], error) {
+		entriesToSend, entriesErr := func() ([]*log.LogEntry, error) {
 			batchSize := rlService.determineBatchSize()
 
 			totalToSend := nextIndex - previousLogIndex
@@ -90,7 +92,7 @@ func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64,
 
 		if entriesErr != nil { return nil, entriesErr }
 
-		entries = utils.Map[*log.LogEntry[T], *replogrpc.LogEntry](entriesToSend, transformLogEntry)
+		entries = utils.Map[*log.LogEntry, *replogrpc.LogEntry](entriesToSend, transformLogEntry)
 	}
 
 	appendEntry := &replogrpc.AppendEntry{
@@ -113,11 +115,11 @@ func (rlService *ReplicatedLogService[T]) PrepareAppendEntryRPC(nextIndex int64,
 		--> minimum is found by floor(total alive systems / 2) + 1
 */
 
-func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
-	var aliveSystems []*system.System[T]
+func (rlService *ReplicatedLogService) GetAliveSystemsAndMinSuccessResps() ([]*system.System, int) {
+	var aliveSystems []*system.System
 
 	rlService.Systems.Range(func(key, value interface{}) bool {
-		sys := value.(*system.System[T])
+		sys := value.(*system.System)
 		if sys.Status == system.Ready { aliveSystems = append(aliveSystems, sys) }
 
 		return true
@@ -134,7 +136,7 @@ func (rlService *ReplicatedLogService[T]) GetAliveSystemsAndMinSuccessResps() ([
 			--> reset the timer with the heartbeat interval
 */
 
-func (rlService *ReplicatedLogService[T]) resetTimer() {
+func (rlService *ReplicatedLogService) resetTimer() {
 	if ! rlService.HeartBeatTimer.Stop() {
 		select {
 			case <-rlService.HeartBeatTimer.C:

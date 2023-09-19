@@ -15,7 +15,8 @@ services:
       - 54323
       - 54324
     volumes:
-      - $HOME/raftsrv1:/home/raft/replog
+      - $HOME/raftsrv1/replog:/home/raft/replog
+      - $HOME/raftsrv1/statemachine:/home/raft/statemachine
   raftsrv2:
     image: raftsrv2_img
     container_name: raftsrv2_cont
@@ -31,7 +32,8 @@ services:
       - 54323
       - 54324
     volumes:
-      - $HOME/raftsrv2:/home/raft/replog
+      - $HOME/raftsrv2/replog:/home/raft/replog
+      - $HOME/raftsrv2/statemachine:/home/raft/statemachine
   raftsrv3:
     image: raftsrv3_img
     container_name: raftsrv3_cont
@@ -47,7 +49,8 @@ services:
       - 54323
       - 54324
     volumes:
-      - $HOME/raftsrv3:/home/raft/replog
+      - $HOME/raftsrv3/replog:/home/raft/replog
+      - $HOME/raftsrv3/statemachine:/home/raft/statemachine
   raftsrv4:
     image: raftsrv4_img
     container_name: raftsrv4_cont
@@ -63,7 +66,8 @@ services:
       - 54323
       - 54324
     volumes:
-      - $HOME/raftsrv4:/home/raft/replog
+      - $HOME/raftsrv4/replog:/home/raft/replog
+      - $HOME/raftsrv4/statemachine:/home/raft/statemachine
   raftsrv5:
     image: raftsrv5_img
     container_name: raftsrv5_cont
@@ -79,7 +83,8 @@ services:
       - 54323
       - 54324
     volumes:
-      - $HOME/raftsrv5:/home/raft/replog
+      - $HOME/raftsrv5/replog:/home/raft/replog
+      - $HOME/raftsrv5/statemachine:/home/raft/statemachine
 networks:
   raft_api_network:
     driver: bridge

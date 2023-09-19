@@ -4,7 +4,6 @@ import "net"
 import "os"
 import "sync"
 
-import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/logger"
@@ -28,29 +27,31 @@ var Log = clog.NewCustomLog(NAME)
 	initialize sub modules under the same raft service and link together
 */
 
-func NewRaftService[T log.MachineCommands, U statemachine.Action, V statemachine.Data, W statemachine.State](opts RaftServiceOpts[T, U, V, W]) *RaftService[T, U, V, W] {
+func NewRaftService(opts RaftServiceOpts) *RaftService {
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { Log.Fatal("unable to get hostname") }
 
-	wal, walErr := wal.NewWAL[T]()
+	wal, walErr := wal.NewWAL()
 	if walErr != nil { Log.Fatal("unable to create or open WAL") }
 
-	currentSystem := &system.System[T]{
+	sm, smErr := statemachine.NewStateMachine()
+	if smErr != nil { Log.Fatal("unable to create or open State Machine") }
+
+	currentSystem := &system.System{
 		Host: hostname,
 		CurrentTerm: 0,
 		CommitIndex: DefaultCommitIndex,
 		LastApplied: DefaultLastApplied,
 		Status: system.Ready,
 		WAL: wal,
+		StateMachine: sm,
 	}
 
-	raft := &RaftService[T, U, V, W]{
+	raft := &RaftService{
 		Protocol: opts.Protocol,
 		Systems: &sync.Map{},
 		CurrentSystem: currentSystem,
-		CommandChannel: make(chan T, CommandChannelBuffSize),
-		StateMachineLogApplyChan: make(chan replog.LogCommitChannelEntry[T]),
-		StateMachineLogAppliedChan: make(chan error),
+		CommandChannel: make(chan statemachine.StateMachineOperation, CommandChannelBuffSize),
 	}
 
 	for _, sys := range opts.SystemsList {
@@ -65,41 +66,38 @@ func NewRaftService[T log.MachineCommands, U statemachine.Action, V statemachine
 	rConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	snpConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
-	leOpts := &leaderelection.LeaderElectionOpts[T]{
+	leOpts := &leaderelection.LeaderElectionOpts{
 		Port: opts.Ports.LeaderElection,
 		ConnectionPool: leConnPool,
 		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
 	}
 
-	rlOpts := &replog.ReplicatedLogOpts[T]{
+	rlOpts := &replog.ReplicatedLogOpts{
 		Port: opts.Ports.ReplicatedLog,
 		ConnectionPool: rlConnPool,
 		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
 	}
 
-	rOpts := &relay.RelayOpts[T]{
+	rOpts := &relay.RelayOpts{
 		Port: opts.Ports.Relay,
 		ConnectionPool: rConnPool,
 		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
 	}
 
-	snpOpts := &snapshot.SnapshotServiceOpts[T, U, V, W]{
+	snpOpts := &snapshot.SnapshotServiceOpts{
 		Port: opts.Ports.Snapshot,
 		ConnectionPool: snpConnPool,
 		CurrentSystem: currentSystem,
 		Systems: raft.Systems,
-		StateMachine: opts.StateMachine,
-		SnapshotHandler: opts.SnapshotHandler,
-		// SnapshotReplayer: opts.SnapshotReplayer,
 	}
 
-	leService := leaderelection.NewLeaderElectionService[T](leOpts)
-	rlService := replog.NewReplicatedLogService[T](rlOpts)
-	rService := relay.NewRelayService[T](rOpts)
-	snpService := snapshot.NewSnapshotService[T, U, V, W](snpOpts)
+	leService := leaderelection.NewLeaderElectionService(leOpts)
+	rlService := replog.NewReplicatedLogService(rlOpts)
+	rService := relay.NewRelayService(rOpts)
+	snpService := snapshot.NewSnapshotService(snpOpts)
 
 	raft.LeaderElection = leService
 	raft.ReplicatedLog = rlService
@@ -126,28 +124,7 @@ func NewRaftService[T log.MachineCommands, U statemachine.Action, V statemachine
 		3.) start module pass throughs 
 */
 
-func (raft *RaftService[T, U, V, W]) StartRaftService() {
-	go func() {
-		for {
-			logs :=<- raft.ReplicatedLog.LogApplyChan
-			completedLogs := []replog.LogCommitChannelEntry[T]{}
-
-			for _, log := range logs {
-				raft.StateMachineLogApplyChan <- log
-				applyErr :=<- raft.StateMachineLogAppliedChan
-
-				if applyErr != nil {
-					Log.Debug("error on op:", applyErr.Error())
-					log.Complete = false
-				} else { log.Complete = true }
-
-				completedLogs = append(completedLogs, log)
-			}
-
-			raft.ReplicatedLog.LogApplyChan <- completedLogs
-		}
-	}()
-
+func (raft *RaftService) StartRaftService() {
 	var updateStateMachineMutex sync.Mutex
 	updateStateMachineMutex.Lock()
 
@@ -173,12 +150,12 @@ func (raft *RaftService[T, U, V, W]) StartRaftService() {
 			3.) update current term to term of last log
 */
 
-func (raft *RaftService[T, U, V, W]) UpdateRepLogOnStartup() (bool, error) {
-	snapshot, snapshotErr := raft.CurrentSystem.WAL.GetSnapshot()
+func (raft *RaftService) UpdateRepLogOnStartup() (bool, error) {
+	snapshotEntry, snapshotErr := raft.CurrentSystem.WAL.GetSnapshot()
 	if snapshotErr != nil { return false, snapshotErr }
 
-	if snapshot != nil { 
-		_, replayErr := raft.SnapshotReplayer(raft.StateMachine, snapshot) 
+	if snapshotEntry != nil { 
+		replayErr := raft.CurrentSystem.StateMachine.ReplaySnapshot(snapshotEntry.SnapshotFilePath) 
 		if replayErr != nil { return false, replayErr }
 	}
 
@@ -207,7 +184,7 @@ func (raft *RaftService[T, U, V, W]) UpdateRepLogOnStartup() (bool, error) {
 		initialize net listeners and start all sub modules
 */
 
-func (raft *RaftService[T, U, V, W]) StartModules() {
+func (raft *RaftService) StartModules() {
 	leListener, leErr := net.Listen(raft.Protocol, raft.LeaderElection.Port)
 	if leErr != nil { Log.Error("Failed to listen: %v", leErr.Error()) }
 
@@ -241,7 +218,7 @@ func (raft *RaftService[T, U, V, W]) StartModules() {
 			follower to current leader	
 */
 
-func (raft *RaftService[T, U, V, W]) StartModulePassThroughs() {
+func (raft *RaftService) StartModulePassThroughs() {
 	go func() {
 		for {
 			<- raft.ReplicatedLog.LeaderAcknowledgedSignal
@@ -294,8 +271,8 @@ func (raft *RaftService[T, U, V, W]) StartModulePassThroughs() {
 	}()
 }
 
-func (raft *RaftService[T, U, V, W]) InitStats() error {
-	initStatObj, calcErr := stats.CalculateCurrentStats[T]()
+func (raft *RaftService) InitStats() error {
+	initStatObj, calcErr := stats.CalculateCurrentStats()
 	if calcErr != nil {
 		Log.Error("unable to get calculate stats for path", calcErr.Error())
 		return calcErr

@@ -1,9 +1,8 @@
 package replog
 
-import "errors"
-
 import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/stats"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -23,11 +22,11 @@ import "github.com/sirgallo/raft/pkg/utils"
 				entry
 */
 
-func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
+func (rlService *ReplicatedLogService) ApplyLogs() error {
 	start := rlService.CurrentSystem.LastApplied + 1 // next to apply after last known applied
 	end := rlService.CurrentSystem.CommitIndex  // include up to committed
 
-	var logsToBeApplied []*log.LogEntry[T]
+	var logsToBeApplied []*log.LogEntry
 	
 	if start == end {
 		entry, readErr := rlService.CurrentSystem.WAL.Read(start)
@@ -41,24 +40,19 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 		logsToBeApplied = append(logsToBeApplied, entries...) 
 	}
 
-	transform := func(logEntry *log.LogEntry[T]) LogCommitChannelEntry[T] {
-		return LogCommitChannelEntry[T]{
-			LogEntry: logEntry,
-			Complete: false,
-		}
+	lastLogApplied := logsToBeApplied[len(logsToBeApplied) - 1]
+	
+	transform := func(logEntry *log.LogEntry) *statemachine.StateMachineOperation { 
+		command := logEntry.Command 
+		return &command
 	}
 
-	logApplyEntries := utils.Map[*log.LogEntry[T], LogCommitChannelEntry[T]](logsToBeApplied, transform)
+	logApplyEntries := utils.Map[*log.LogEntry, *statemachine.StateMachineOperation](logsToBeApplied, transform)
 
-	rlService.LogApplyChan <- logApplyEntries
-	completedLogs :=<- rlService.LogApplyChan
-
-	for _, completeLog := range completedLogs {
-		if ! completeLog.Complete {
-			rlService.Log.Error("incomplete log", completeLog)
-			return errors.New("incomplete commit of logs")
-		} else { rlService.CurrentSystem.LastApplied = int64(completeLog.LogEntry.Index) }
-	}
+	_, bulkInserErr := rlService.CurrentSystem.StateMachine.BulkApply(logApplyEntries)
+	if bulkInserErr != nil { return bulkInserErr }
+	
+	rlService.CurrentSystem.LastApplied = lastLogApplied.Index
 
 	bucketSizeInBytes, getSizeErr := rlService.CurrentSystem.WAL.GetBucketSizeInBytes()
 	if getSizeErr != nil { 
@@ -81,7 +75,7 @@ func (rlService *ReplicatedLogService[T]) ApplyLogs() error {
 		go func () { rlService.SignalStartSnapshot <- true }()
 		go func () { rlService.PauseReplogSignal <- true }()
 
-		statObj, calcErr := stats.CalculateCurrentStats[T]()
+		statObj, calcErr := stats.CalculateCurrentStats()
 		if calcErr != nil { return calcErr }
 
 		setErr := rlService.CurrentSystem.WAL.SetStat(*statObj)

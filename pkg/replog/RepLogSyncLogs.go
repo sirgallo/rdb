@@ -16,9 +16,9 @@ import "github.com/sirgallo/raft/pkg/system"
 			on success: return true, nil --> the log is now up to date with the leader
 */
 
-func (rlService *ReplicatedLogService[T]) SyncLogs(host string) (bool, error) {
+func (rlService *ReplicatedLogService) SyncLogs(host string) (bool, error) {
 	s, _ := rlService.Systems.Load(host)
-	sys := s.(*system.System[T])
+	sys := s.(*system.System)
 
 	sys.SetStatus(system.Busy)
 

@@ -5,7 +5,6 @@ import "path/filepath"
 
 import bolt "go.etcd.io/bbolt"
 
-import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 
 
@@ -20,7 +19,7 @@ var Log = clog.NewCustomLog(NAME)
 		2.) create the replog bucket if it does not already exist
 */
 
-func NewWAL [T log.MachineCommands]() (*WAL[T], error) {
+func NewWAL () (*WAL, error) {
 	homedir, homeErr := os.UserHomeDir()
 	if homeErr != nil { return nil, homeErr }
 
@@ -74,7 +73,7 @@ func NewWAL [T log.MachineCommands]() (*WAL[T], error) {
 	bucketErrStats := db.Update(statsTransaction)
 	if bucketErrStats != nil { return nil, bucketErrStats }
 
-  return &WAL[T]{ 
+  return &WAL{ 
 		DBFile: dbPath,
 		DB: db,
 	}, nil

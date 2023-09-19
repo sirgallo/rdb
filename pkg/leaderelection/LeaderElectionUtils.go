@@ -41,12 +41,12 @@ func initTimeoutOnStartup() time.Duration {
 		
 */
 
-func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*system.System[T], int64) {
-	var aliveSystems []*system.System[T]
+func (leService *LeaderElectionService) GetAliveSystemsAndMinVotes() ([]*system.System, int64) {
+	var aliveSystems []*system.System
 	totalSystems := int64(1)
 
 	leService.Systems.Range(func(key, value interface{}) bool {
-		sys := value.(*system.System[T])
+		sys := value.(*system.System)
 		if sys.Status != system.Dead { aliveSystems = append(aliveSystems, sys) }
 		totalSystems++
 		
@@ -63,7 +63,7 @@ func (leService *LeaderElectionService[T]) GetAliveSystemsAndMinVotes() ([]*syst
 		3.) reset the timer with the new random timeout period
 */
 
-func (leService *LeaderElectionService[T]) resetTimer() {
+func (leService *LeaderElectionService) resetTimer() {
 	reInitTimeout := func() {
 		timeoutDuration := calculateTimeout()
 		leService.Timeout = timeoutDuration

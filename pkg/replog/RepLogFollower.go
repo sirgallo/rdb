@@ -5,6 +5,7 @@ import "errors"
 
 import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -36,17 +37,17 @@ import "github.com/sirgallo/raft/pkg/utils"
 				--> return a failed response so the follower can sync itself up to the leader if inconsistent log length
 */
 
-func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
+func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
 	s, ok := rlService.Systems.Load(req.LeaderId)
 	if ! ok {
-		sys := &system.System[T]{
+		sys := &system.System{
 			Host: req.LeaderId,
 			Status: system.Ready,
 		}
 
 		rlService.Systems.Store(sys.Host, sys)
 	} else {
-		sys := s.(*system.System[T])
+		sys := s.(*system.System)
 		sys.SetStatus(system.Ready)
 	}
 
@@ -135,27 +136,27 @@ func (rlService *ReplicatedLogService[T]) AppendEntryRPC(ctx context.Context, re
 		the state machine up to the leader's last commit index
 */
 
-func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.AppendEntry) (bool, error) {
+func (rlService *ReplicatedLogService) HandleReplicateLogs(req *replogrpc.AppendEntry) (bool, error) {
 	min := func(idx1, idx2 int64) int64 {
 		if idx1 < idx2 { return idx1 }
 		return idx2
 	}
 
-	logTransform := func(entry *replogrpc.LogEntry) *log.LogEntry[T] {
-		cmd, decErr := utils.DecodeStringToStruct[T](entry.Command)
+	logTransform := func(entry *replogrpc.LogEntry) *log.LogEntry {
+		cmd, decErr := utils.DecodeStringToStruct[statemachine.StateMachineOperation](entry.Command)
 		if decErr != nil {
 			rlService.Log.Error("error on decode -->", decErr.Error())
 			return nil
 		}
 
-		return &log.LogEntry[T]{
+		return &log.LogEntry{
 			Index: entry.Index,
 			Term: entry.Term,
 			Command: *cmd,
 		}
 	}
 
-	var logsToAppend []*log.LogEntry[T]
+	var logsToAppend []*log.LogEntry
 
 	appendLogToReplicatedLog := func(entry *replogrpc.LogEntry) error {
 		newLog := logTransform(entry)
@@ -173,7 +174,7 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 
 			if currEntry != nil {
 				if currEntry.Term != entry.Term {
-					transformedLogs := utils.Map[*replogrpc.LogEntry, *log.LogEntry[T]](req.Entries[:idx + 1], logTransform)
+					transformedLogs := utils.Map[*replogrpc.LogEntry, *log.LogEntry](req.Entries[:idx + 1], logTransform)
 					rangeUpdateErr := rlService.CurrentSystem.WAL.RangeAppend(transformedLogs)
 					if rangeUpdateErr != nil { return false, rangeUpdateErr }
 				}
@@ -205,7 +206,7 @@ func (rlService *ReplicatedLogService[T]) HandleReplicateLogs(req *replogrpc.App
 	return true, nil
 }
 
-func (rlService *ReplicatedLogService[T]) generateResponse(lastLogIndex int64, success bool) *replogrpc.AppendEntryResponse {
+func (rlService *ReplicatedLogService) generateResponse(lastLogIndex int64, success bool) *replogrpc.AppendEntryResponse {
 	return &replogrpc.AppendEntryResponse{
 		Term: rlService.CurrentSystem.CurrentTerm,
 		NextLogIndex: lastLogIndex,

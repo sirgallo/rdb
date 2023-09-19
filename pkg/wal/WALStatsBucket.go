@@ -8,7 +8,7 @@ import "github.com/sirgallo/raft/pkg/stats"
 //=========================================== Write Ahead Log Snapshot Ops
 
 
-func (wal *WAL[T]) SetStat(statObj stats.Stats) error {
+func (wal *WAL) SetStat(statObj stats.Stats) error {
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Stats)
 		bucket := tx.Bucket(bucketName)
@@ -30,7 +30,7 @@ func (wal *WAL[T]) SetStat(statObj stats.Stats) error {
 	return nil
 }
 
-func (wal *WAL[T]) GetStats() ([]stats.Stats, error) {
+func (wal *WAL) GetStats() ([]stats.Stats, error) {
 	var statsArr []stats.Stats
 	
 	transaction := func(tx *bolt.Tx) error {
@@ -57,7 +57,7 @@ func (wal *WAL[T]) GetStats() ([]stats.Stats, error) {
 	return statsArr, nil
 }
 
-func (wal *WAL[T]) DeleteStats() error {	
+func (wal *WAL) DeleteStats() error {	
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Stats)
 		bucket := tx.Bucket(bucketName)

@@ -4,9 +4,9 @@ import "net"
 import "time"
 import "google.golang.org/grpc"
 
-import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/replogrpc"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -18,15 +18,14 @@ import "github.com/sirgallo/raft/pkg/utils"
 	create a new service instance with passable options
 */
 
-func NewReplicatedLogService [T log.MachineCommands](opts *ReplicatedLogOpts[T]) *ReplicatedLogService[T] {
-	rlService := &ReplicatedLogService[T]{
+func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
+	rlService := &ReplicatedLogService{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		AppendLogSignal: make(chan T, AppendLogBuffSize),
+		AppendLogSignal: make(chan statemachine.StateMachineOperation, AppendLogBuffSize),
 		LeaderAcknowledgedSignal: make(chan bool),
-		LogApplyChan: make(chan []LogCommitChannelEntry[T]),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
 		SignalStartSnapshot: make(chan bool),
@@ -45,7 +44,7 @@ func NewReplicatedLogService [T log.MachineCommands](opts *ReplicatedLogOpts[T])
 		--> start the log timeouts
 */
 
-func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *net.Listener) {
+func (rlService *ReplicatedLogService) StartReplicatedLogService(listener *net.Listener) {
 	srv := grpc.NewServer()
 	rlService.Log.Info("replog gRPC server is listening on port:", rlService.Port)
 
@@ -73,7 +72,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogService(listener *ne
 					them back up to the leader
 */
 
-func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
+func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
 	
 	timeoutChan := make(chan bool)
@@ -138,7 +137,7 @@ func (rlService *ReplicatedLogService[T]) StartReplicatedLogTimeout() {
 	}()
 }
 
-func (rlService *ReplicatedLogService[T]) attemptResetTimeout() {
+func (rlService *ReplicatedLogService) attemptResetTimeout() {
 	select {
 		case rlService.ResetTimeoutSignal <- true:
 		default:

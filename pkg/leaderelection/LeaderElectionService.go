@@ -3,7 +3,6 @@ package leaderelection
 import "net"
 import "time"
 
-import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/lerpc"
 import "github.com/sirgallo/raft/pkg/system"
@@ -19,8 +18,8 @@ import "google.golang.org/grpc"
 	--> initialize state to Follower and initialize a random timeout period for leader election
 */
 
-func NewLeaderElectionService[T log.MachineCommands](opts *LeaderElectionOpts[T]) *LeaderElectionService[T] {
-	leService := &LeaderElectionService[T]{
+func NewLeaderElectionService(opts *LeaderElectionOpts) *LeaderElectionService {
+	leService := &LeaderElectionService{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
@@ -41,7 +40,7 @@ func NewLeaderElectionService[T log.MachineCommands](opts *LeaderElectionOpts[T]
 		--> start the leader election timeout
 */
 
-func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *net.Listener) {
+func (leService *LeaderElectionService) StartLeaderElectionService(listener *net.Listener) {
 	srv := grpc.NewServer()
 	leService.Log.Info("leader election gRPC server is listening on port:", leService.Port)
 	lerpc.RegisterLeaderElectionServiceServer(srv, leService)
@@ -61,7 +60,7 @@ func (leService *LeaderElectionService[T]) StartLeaderElectionService(listener *
 		2.) otherwise, on timeout, start the leader election process
 */
 
-func (leService *LeaderElectionService[T]) StartElectionTimeout() {
+func (leService *LeaderElectionService) StartElectionTimeout() {
 	leService.ElectionTimer = time.NewTimer(leService.Timeout)
 	timeoutChannel := make(chan bool)
 

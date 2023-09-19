@@ -1,9 +1,10 @@
 package log
 
-type MachineCommands = comparable
+import "github.com/sirgallo/raft/pkg/statemachine"
 
-type LogEntry [T MachineCommands] struct {
+
+type LogEntry struct {
 	Index int64
 	Term int64
-	Command T // command can be type T to represent the specific state machine commands 
+	Command statemachine.StateMachineOperation
 }

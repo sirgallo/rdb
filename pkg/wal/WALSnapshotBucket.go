@@ -1,23 +1,21 @@
 package wal
 
 import bolt "go.etcd.io/bbolt"
-import "google.golang.org/protobuf/proto"
 
-import "github.com/sirgallo/raft/pkg/snapshotrpc"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== Write Ahead Log Snapshot Ops
 
 
-func (wal *WAL[T]) SetSnapshot(snapshot *snapshotrpc.Snapshot) error {
+func (wal *WAL) SetSnapshot(snapshot *SnapshotEntry) error {
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Snapshot)
 		bucket := tx.Bucket(bucketName)
 
 		key := []byte(SnapshotKey)
 
-		value, transformErr := utils.EncodeStructToBytes[*snapshotrpc.Snapshot](snapshot)
+		value, transformErr := utils.EncodeStructToBytes[*SnapshotEntry](snapshot)
 		if transformErr != nil { return transformErr }
 
 		putErr := bucket.Put(key, value)
@@ -32,8 +30,9 @@ func (wal *WAL[T]) SetSnapshot(snapshot *snapshotrpc.Snapshot) error {
 	return nil
 }
 
-func (wal *WAL[T]) GetSnapshot() (*snapshotrpc.Snapshot, error) {
-	var snapshot *snapshotrpc.Snapshot
+func (wal *WAL) GetSnapshot() (*SnapshotEntry, error) {
+	var snapshotEntry *SnapshotEntry
+	
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Snapshot)
 		bucket := tx.Bucket(bucketName)
@@ -43,11 +42,10 @@ func (wal *WAL[T]) GetSnapshot() (*snapshotrpc.Snapshot, error) {
 		val := bucket.Get(key)
 		
 		if val != nil {
-			decoded := &snapshotrpc.Snapshot{}
-			decodeErr := proto.Unmarshal(val, decoded)
+			decoded, decodeErr := utils.DecodeBytesToStruct[SnapshotEntry](val)
 			if decodeErr != nil { return decodeErr }
 
-			snapshot = decoded
+			snapshotEntry = decoded
 		}
 
 		return nil
@@ -56,5 +54,5 @@ func (wal *WAL[T]) GetSnapshot() (*snapshotrpc.Snapshot, error) {
 	getErr := wal.DB.View(transaction)
 	if getErr != nil { return nil, getErr }
 
-	return snapshot, nil
+	return snapshotEntry, nil
 }

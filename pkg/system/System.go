@@ -20,11 +20,11 @@ var Log = clog.NewCustomLog(NAME)
 		3.) if current term is supplied, update the system term
 */
 
-func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) bool {
+func (sys *System) TransitionToFollower(opts StateTransitionOpts) bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 
-	resetVotedFor := func (sys *System[T]) { sys.VotedFor = utils.GetZero[string]() }
+	resetVotedFor := func (sys *System) { sys.VotedFor = utils.GetZero[string]() }
 	sys.State = Follower
 
 	if opts.VotedFor != nil {
@@ -44,7 +44,7 @@ func (sys *System[T]) TransitionToFollower(opts StateTransitionOpts) bool {
 		3.) update voted for to self
 */
 
-func (sys *System[T]) TransitionToCandidate() bool {
+func (sys *System) TransitionToCandidate() bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 
@@ -61,7 +61,7 @@ func (sys *System[T]) TransitionToCandidate() bool {
 		1.) update state to Leader
 */
 
-func (sys *System[T]) TransitionToLeader() bool {
+func (sys *System) TransitionToLeader() bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 
@@ -76,7 +76,7 @@ func (sys *System[T]) TransitionToLeader() bool {
 		1.) update the current leader id if not already
 */
 
-func (sys *System[T]) SetCurrentLeader(leaderId string) bool {
+func (sys *System) SetCurrentLeader(leaderId string) bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 
@@ -89,7 +89,7 @@ func (sys *System[T]) SetCurrentLeader(leaderId string) bool {
 		1.) update the status of the system to either Dead, Ready, or Busy
 */
 
-func (sys *System[T]) SetStatus(status SystemStatus) bool {
+func (sys *System) SetStatus(status SystemStatus) bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 
@@ -111,7 +111,7 @@ func (sys *System[T]) SetStatus(status SystemStatus) bool {
 		1.) update the next log index to send for a particular system
 */
 
-func (sys *System[T]) UpdateNextIndex(newIndex int64) bool {
+func (sys *System) UpdateNextIndex(newIndex int64) bool {
 	sys.SystemMutex.Lock()
 	defer sys.SystemMutex.Unlock()
 

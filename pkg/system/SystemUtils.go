@@ -14,7 +14,7 @@ package system
 			to indicate this
 */
 
-func (sys *System[T]) DetermineLastLogIdxAndTerm() (int64, int64, error) {
+func (sys *System) DetermineLastLogIdxAndTerm() (int64, int64, error) {
 	var lastLogIndex, lastLogTerm int64
 
 	lastLog, lastLogErr := sys.WAL.GetLatest()

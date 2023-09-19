@@ -10,11 +10,11 @@ import "github.com/sirgallo/raft/pkg/system"
 		--> minimum is found by floor(total alive systems / 2) + 1
 */
 
-func (snpService *SnapshotService[T, U, V, W]) GetAliveSystemsAndMinSuccessResps() ([]*system.System[T], int) {
-	var aliveSystems []*system.System[T]
+func (snpService *SnapshotService) GetAliveSystemsAndMinSuccessResps() ([]*system.System, int) {
+	var aliveSystems []*system.System
 
 	snpService.Systems.Range(func(key, value interface{}) bool {
-		sys := value.(*system.System[T])
+		sys := value.(*system.System)
 		if sys.Status == system.Ready { aliveSystems = append(aliveSystems, sys) }
 
 		return true

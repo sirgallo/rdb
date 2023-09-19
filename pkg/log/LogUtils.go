@@ -11,8 +11,8 @@ import "github.com/sirgallo/raft/pkg/utils"
 		convert entries to byte array to be applied to WAL
 */
 
-func TransformLogEntryToBytes [T MachineCommands](replog *LogEntry[T]) ([]byte, error) {
-	logAsBytes, encErr := utils.EncodeStructToBytes[*LogEntry[T]](replog)
+func TransformLogEntryToBytes(replog *LogEntry) ([]byte, error) {
+	logAsBytes, encErr := utils.EncodeStructToBytes[*LogEntry](replog)
 	if encErr != nil { return nil, encErr }
 
 	return logAsBytes, nil
@@ -23,8 +23,8 @@ func TransformLogEntryToBytes [T MachineCommands](replog *LogEntry[T]) ([]byte, 
 		convert entries from WAL from byte array to log entry
 */
 
-func TransformBytesToLogEntry [T MachineCommands](data []byte) (*LogEntry[T], error) {
-	logEntry, encErr := utils.DecodeBytesToStruct[LogEntry[T]](data)
+func TransformBytesToLogEntry(data []byte) (*LogEntry, error) {
+	logEntry, encErr := utils.DecodeBytesToStruct[LogEntry](data)
 	if encErr != nil { return nil, encErr }
 
 	return logEntry, nil

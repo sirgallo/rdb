@@ -4,22 +4,15 @@ import "os"
 import "syscall"
 import "time"
 
-
-import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 
 
 var Log = clog.NewCustomLog(NAME)
 
 
-func CalculateCurrentStats [T log.MachineCommands]() (*Stats, error) {
+func CalculateCurrentStats() (*Stats, error) {
 	path, dirErr := os.Getwd()
 	if dirErr != nil { return nil, dirErr }
-	
-	/*
-	dirInfo, infoErr := os.Stat(path)
-	if infoErr != nil { return nil, infoErr }
-	*/
 
 	var stat syscall.Statfs_t
 

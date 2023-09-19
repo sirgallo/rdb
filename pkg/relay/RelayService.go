@@ -4,9 +4,9 @@ import "context"
 import "errors"
 import "net"
 
-import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/relayrpc"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 import "google.golang.org/grpc"
@@ -19,14 +19,14 @@ import "google.golang.org/grpc"
 	create a new service instance with passable options
 */
 
-func NewRelayService [T log.MachineCommands](opts *RelayOpts[T]) *RelayService[T] {
-	rService := &RelayService[T]{
+func NewRelayService(opts *RelayOpts) *RelayService {
+	rService := &RelayService{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		RelayChannel: make(chan T, RelayChannelBuffSize),
-		RelayedAppendLogSignal: make(chan T),
+		RelayChannel: make(chan statemachine.StateMachineOperation, RelayChannelBuffSize),
+		RelayedAppendLogSignal: make(chan statemachine.StateMachineOperation),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -40,7 +40,7 @@ func NewRelayService [T log.MachineCommands](opts *RelayOpts[T]) *RelayService[T
 		--> start the pass through for entries from follower to leader
 */
 
-func (rService *RelayService[T]) StartRelayService(listener *net.Listener) {
+func (rService *RelayService) StartRelayService(listener *net.Listener) {
 	srv := grpc.NewServer()
 	rService.Log.Info("relay gRPC server is listening on port:", rService.Port)
 	relayrpc.RegisterRelayServiceServer(srv, rService)
@@ -59,8 +59,8 @@ func (rService *RelayService[T]) StartRelayService(listener *net.Listener) {
 		buffer for re-processing
 */
 
-func (rService *RelayService[T]) RelayListener() {
-	failedBuffer := make(chan T, FailedBuffSize)
+func (rService *RelayService) RelayListener() {
+	failedBuffer := make(chan statemachine.StateMachineOperation, FailedBuffSize)
 	
 	go func() {
 		cmd :=<- failedBuffer
@@ -92,13 +92,13 @@ func (rService *RelayService[T]) RelayListener() {
 		5.) otherwise, return success
 */
 
-func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse, error){
+func (rService *RelayService) RelayClientRPC(cmd statemachine.StateMachineOperation) (*relayrpc.RelayResponse, error){
 	if rService.CurrentSystem.CurrentLeader == utils.GetZero[string]() { 
 		return nil, errors.New("current leader not set") 
 	}
 
 	leader := rService.CurrentSystem.CurrentLeader
-	strCmd, encErr := utils.EncodeStructToString[T](cmd)
+	strCmd, encErr := utils.EncodeStructToString[statemachine.StateMachineOperation](cmd)
 	if encErr != nil { 
 		rService.Log.Error("error encoding log struct to string") 
 		return nil, encErr
@@ -140,7 +140,7 @@ func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse,
 		rService.Log.Warn("system", leader, "unreachable, setting status to dead")
 
 		sys, ok := rService.Systems.Load(leader)
-		if ok { sys.(*system.System[T]).SetStatus(system.Dead) }
+		if ok { sys.(*system.System).SetStatus(system.Dead) }
 
 		rService.ConnectionPool.CloseConnections(leader)
 		
@@ -161,25 +161,25 @@ func (rService *RelayService[T]) RelayClientRPC(cmd T) (*relayrpc.RelayResponse,
 			4.) if system is not leader, append to the relay channel to be relayed again
 */
 
-func (rService *RelayService[T]) RelayRPC(ctx context.Context, req *relayrpc.RelayRequest) (*relayrpc.RelayResponse, error) {
+func (rService *RelayService) RelayRPC(ctx context.Context, req *relayrpc.RelayRequest) (*relayrpc.RelayResponse, error) {
 	s, ok := rService.Systems.Load(req.Host)
 	if ! ok { 
-		sys := &system.System[T]{
+		sys := &system.System{
 			Host: req.Host,
 			Status: system.Ready,
 		}
 
 		rService.Systems.Store(sys.Host, sys)
 	} else {
-		sys := s.(*system.System[T])
+		sys := s.(*system.System)
 		if sys.Status == system.Dead { 
 			sys.SetStatus(system.Ready)
 		}
 	}
 
-	cmd, decErr := utils.DecodeStringToStruct[T](req.Command)
+	cmd, decErr := utils.DecodeStringToStruct[statemachine.StateMachineOperation](req.Command)
 	if decErr != nil { 
-		rService.Log.Error("error decoding command")
+		rService.Log.Error("error decoding command", decErr.Error())
 		failedResp := &relayrpc.RelayResponse{ ProcessedRequest: false }
 		return failedResp, decErr
 	}

@@ -26,7 +26,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 			leader election timeout --> so randomly generate new timeout period for the system
 */
 
-func (leService *LeaderElectionService[T]) Election() error {
+func (leService *LeaderElectionService) Election() error {
 	leService.CurrentSystem.TransitionToCandidate()
 	leRespChans := leService.createLERespChannels()
 	aliveSystems, minimumVotes := leService.GetAliveSystemsAndMinVotes()
@@ -52,7 +52,7 @@ func (leService *LeaderElectionService[T]) Election() error {
 						}
 
 						leService.Systems.Range(func(key, value interface{}) bool {
-							sys := value.(*system.System[T])
+							sys := value.(*system.System)
 							sys.UpdateNextIndex(lastLogIndex)
 							
 							return true
@@ -105,7 +105,7 @@ func (leService *LeaderElectionService[T]) Election() error {
 		is discovered, all go routines are signalled to stop broadcasting.
 */
 
-func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system.System[T], leRespChans LEResponseChannels) error {
+func (leService *LeaderElectionService) broadcastVotes(aliveSystems []*system.System, leRespChans LEResponseChannels) error {
 	defer close(*leRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -126,7 +126,7 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 	for _, sys := range aliveSystems {
 		requestVoteWG.Add(1)
 
-		go func(sys *system.System[T]) {
+		go func(sys *system.System) {
 			defer requestVoteWG.Done()
 			
 			conn, connErr := leService.ConnectionPool.GetConnection(sys.Host, leService.Port)
@@ -200,13 +200,13 @@ func (leService *LeaderElectionService[T]) broadcastVotes(aliveSystems []*system
 			5.) otherwise, do not grant the vote
 */
 
-func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
+func (leService *LeaderElectionService) RequestVoteRPC(ctx context.Context, req *lerpc.RequestVote) (*lerpc.RequestVoteResponse, error) {
 	lastLogIndex, lastLogTerm, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
 	if lastLogErr != nil { return nil, lastLogErr }
 
 	s, ok := leService.Systems.Load(req.CandidateId)
 	if ! ok { 
-		sys := &system.System[T]{
+		sys := &system.System{
 			Host: req.CandidateId,
 			Status: system.Ready,
 			NextIndex: lastLogIndex,
@@ -214,7 +214,7 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 
 		leService.Systems.Store(sys.Host, sys)
 	} else {
-		sys := s.(*system.System[T])
+		sys := s.(*system.System)
 		sys.SetStatus(system.Ready)
 		sys.UpdateNextIndex(lastLogIndex)
 	}
@@ -255,7 +255,7 @@ func (leService *LeaderElectionService[T]) RequestVoteRPC(ctx context.Context, r
 	return voteRejected, nil
 }
 
-func (leService *LeaderElectionService[T]) createLERespChannels() LEResponseChannels {
+func (leService *LeaderElectionService) createLERespChannels() LEResponseChannels {
 	broadcastClose := make(chan struct{})
 	votesChan := make(chan int)
 	higherTermDiscovered := make(chan int64)
@@ -267,7 +267,7 @@ func (leService *LeaderElectionService[T]) createLERespChannels() LEResponseChan
 	}
 }
 
-func (leService *LeaderElectionService[T]) attemptResetTimeoutSignal() {
+func (leService *LeaderElectionService) attemptResetTimeoutSignal() {
 	select {
 		case leService.ResetTimeoutSignal <- true:
 		default:

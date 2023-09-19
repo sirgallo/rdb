@@ -7,6 +7,7 @@ import "google.golang.org/grpc"
 
 import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
+import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -21,7 +22,7 @@ import "github.com/sirgallo/raft/pkg/utils"
 		If a higher term is discovered in a response, revert the Leader back to Follower State
 */
 
-func (rlService *ReplicatedLogService[T]) Heartbeat() error {
+func (rlService *ReplicatedLogService) Heartbeat() error {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, _ := rlService.GetAliveSystemsAndMinSuccessResps()
 
@@ -88,7 +89,7 @@ func (rlService *ReplicatedLogService[T]) Heartbeat() error {
 			--> if a response with a last log index less than current log index on leader, sync logs until up to date
 */
 
-func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
+func (rlService *ReplicatedLogService) ReplicateLogs(cmd statemachine.StateMachineOperation) error {
 	rlRespChans := rlService.createRLRespChannels()
 	aliveSystems, minSuccessfulResps := rlService.GetAliveSystemsAndMinSuccessResps()
 
@@ -105,7 +106,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 	requests := []ReplicatedLogRequest{}
 	successfulResps := int64(0)
 
-	newLog := &log.LogEntry[T]{
+	newLog := &log.LogEntry{
 		Index: nextIndex,
 		Term: rlService.CurrentSystem.CurrentTerm,
 		Command: cmd,
@@ -197,7 +198,7 @@ func (rlService *ReplicatedLogService[T]) ReplicateLogs(cmd T) error {
 						--> sync the follower up to the leader for any inconsistent log entries
 */
 
-func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) error {
+func (rlService *ReplicatedLogService) broadcastAppendEntryRPC(requestsPerHost []ReplicatedLogRequest, rlRespChans RLResponseChannels) error {
 	defer close(*rlRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -212,7 +213,7 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 			defer appendEntryWG.Done()
 
 			s, _ := rlService.Systems.Load(req.Host)
-			sys := s.(*system.System[T])
+			sys := s.(*system.System)
 
 			conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
 			if connErr != nil {
@@ -262,9 +263,9 @@ func (rlService *ReplicatedLogService[T]) broadcastAppendEntryRPC(requestsPerHos
 		--> error: remove system from system map and close all open connections
 */
 
-func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
+func (rlService *ReplicatedLogService) clientAppendEntryRPC(
 	conn *grpc.ClientConn,
-	sys *system.System[T],
+	sys *system.System,
 	req ReplicatedLogRequest,
 ) (*replogrpc.AppendEntryResponse, error) {
 	client := replogrpc.NewRepLogServiceClient(conn)
@@ -297,7 +298,7 @@ func (rlService *ReplicatedLogService[T]) clientAppendEntryRPC(
 	return res, nil
 }
 
-func (rlService *ReplicatedLogService[T]) createRLRespChannels() RLResponseChannels {
+func (rlService *ReplicatedLogService) createRLRespChannels() RLResponseChannels {
 	broadcastClose := make(chan struct{})
 	successChan := make(chan int)
 	higherTermDiscovered := make(chan int64)
@@ -309,7 +310,7 @@ func (rlService *ReplicatedLogService[T]) createRLRespChannels() RLResponseChann
 	}
 }
 
-func (rlService *ReplicatedLogService[T]) attemptLeadAckSignal() {
+func (rlService *ReplicatedLogService) attemptLeadAckSignal() {
 	select {
 		case rlService.LeaderAcknowledgedSignal <- true:
 		default:

@@ -2,18 +2,50 @@ package statemachine
 
 import "sync"
 
+import bolt "go.etcd.io/bbolt"
+
 
 type Action = string
-type Data = comparable
-type State = comparable
 
-type StateMachineOperation [T Action, U Data] struct {
-	Action T
-	Data U
+type StateMachineOpPayload struct {
+	Collection string
+	Value	string
 }
 
-type StateMachine [T Action, U Data, V State] struct {
+type StateMachineOperation struct {
+	Action Action
+	Payload StateMachineOpPayload
+}
+
+type StateMachineResponse struct {
+	Collection string
+	Key string
+	Value string
+}
+
+type StateMachine struct {
 	Mutex sync.Mutex
-	State V
-	Ops func(operation StateMachineOperation[T, U]) (U, error)
+	DBFile string
+	DB *bolt.DB
 }
+
+
+const NAME = "StateMachine"
+const SubDirectory = "raft/statemachine"
+const FileName = "statemachine.db"
+
+const (
+	FIND Action = "find"
+	INSERT Action = "insert"
+	DELETE Action = "delete"
+	CREATECOLLECTION Action = "create collection"
+	DROPCOLLECTION Action = "drop collection"
+	LISTCOLLECTIONS Action = "list collections"
+	RANGE Action = "range"
+)
+
+const RootBucket = "root"
+const CollectionBucket = "collection"
+const IndexBucket = "index"
+
+const IndexSuffix = "_index"
