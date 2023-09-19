@@ -131,52 +131,15 @@ func (raft *RaftService) StartRaftService() {
 	_, updateErr := raft.UpdateRepLogOnStartup()
 	if updateErr != nil { Log.Error("error on log replication:", updateErr.Error()) }
 
-	raft.InitStats()
+	statsErr := raft.InitStats()
+	if statsErr != nil { Log.Error("error fetching initial stats", statsErr.Error()) }
 
 	updateStateMachineMutex.Unlock()
-
 
 	raft.StartModules()
 	raft.StartModulePassThroughs()
 	
 	select {}
-}
-
-/*
-	Update RepLog On Startup:
-		on system startup or restart replay the WAL
-			1.) get the latest log from the WAL on disk
-			2.) update commit index to last log index from synced WAL --> WAL only contains committed logs
-			3.) update current term to term of last log
-*/
-
-func (raft *RaftService) UpdateRepLogOnStartup() (bool, error) {
-	snapshotEntry, snapshotErr := raft.CurrentSystem.WAL.GetSnapshot()
-	if snapshotErr != nil { return false, snapshotErr }
-
-	if snapshotEntry != nil { 
-		replayErr := raft.CurrentSystem.StateMachine.ReplaySnapshot(snapshotEntry.SnapshotFilePath) 
-		if replayErr != nil { return false, replayErr }
-	}
-
-	lastLog, latestErr := raft.CurrentSystem.WAL.GetLatest()
-
-	if latestErr != nil {
-		return false, latestErr
-	} else if lastLog != nil {
-		raft.CurrentSystem.CommitIndex = lastLog.Index
-		raft.CurrentSystem.CurrentTerm = lastLog.Term
-
-		applyErr := raft.ReplicatedLog.ApplyLogs()
-		if applyErr != nil { return false, applyErr }
-
-		total, totalErr := raft.CurrentSystem.WAL.GetTotal()
-		if totalErr != nil { return false , totalErr }
-
-		Log.Info("total entries on startup:", total)
-	}
-
-	return true, nil
 }
 
 /*
@@ -269,6 +232,43 @@ func (raft *RaftService) StartModulePassThroughs() {
 			raft.ReplicatedLog.SendSnapshotToSystemSignal <- host
 		}
 	}()
+}
+
+/*
+	Update RepLog On Startup:
+		on system startup or restart replay the WAL
+			1.) get the latest log from the WAL on disk
+			2.) update commit index to last log index from synced WAL --> WAL only contains committed logs
+			3.) update current term to term of last log
+*/
+
+func (raft *RaftService) UpdateRepLogOnStartup() (bool, error) {
+	snapshotEntry, snapshotErr := raft.CurrentSystem.WAL.GetSnapshot()
+	if snapshotErr != nil { return false, snapshotErr }
+
+	if snapshotEntry != nil { 
+		replayErr := raft.CurrentSystem.StateMachine.ReplaySnapshot(snapshotEntry.SnapshotFilePath) 
+		if replayErr != nil { return false, replayErr }
+	}
+
+	lastLog, latestErr := raft.CurrentSystem.WAL.GetLatest()
+
+	if latestErr != nil {
+		return false, latestErr
+	} else if lastLog != nil {
+		raft.CurrentSystem.CommitIndex = lastLog.Index
+		raft.CurrentSystem.CurrentTerm = lastLog.Term
+
+		applyErr := raft.ReplicatedLog.ApplyLogs()
+		if applyErr != nil { return false, applyErr }
+
+		total, totalErr := raft.CurrentSystem.WAL.GetTotal()
+		if totalErr != nil { return false , totalErr }
+
+		Log.Info("total entries on startup:", total)
+	}
+
+	return true, nil
 }
 
 func (raft *RaftService) InitStats() error {

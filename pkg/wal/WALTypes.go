@@ -19,6 +19,7 @@ type SnapshotEntry struct {
 
 type StatOP = string
 
+
 const NAME = "WAL"
 const SubDirectory = "raft/replog"
 const FileName = "replog.db"
