@@ -77,7 +77,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		if statsArr == nil || getStatsErr != nil { return false }
 
 		latestObj := statsArr[len(statsArr) - 1]
-		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / 4
+		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / 1000 // let's keep this small for now
 
 		lastAppliedAtThreshold := bucketSizeInBytes >= thresholdInBytes
 		return lastAppliedAtThreshold && rlService.CurrentSystem.State == system.Leader
