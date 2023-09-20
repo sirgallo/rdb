@@ -12,6 +12,26 @@ import "github.com/sirgallo/raft/pkg/utils"
 import "github.com/sirgallo/raft/pkg/wal"
 
 
+//=========================================== RepLog Service
+
+
+/*
+	Snapshot the current state of of the state machine and the replicated log
+		1.) get the latest known log entry, to set on the snapshotrpc for last included index and term
+			of logs in the snapshot
+		2.) snapshot the current state machine 
+			--> since the db is a boltdb instance, we'll take a backup of the data and gzipped, returning 
+			the filepath where the snapshot is stored on the system as a reference
+		3.) set the snapshot entry in the replicated log db in an index
+			--> the entry contains last included index, last included term, and the filepath on the system
+				to the latest snapshot --> snapshots are stored durably and snapshot entry can be seen as a pointer
+		4.) broadcast the new snapshot to all other systems. so send the entry with the filepath and file compressed
+				to byte representation
+		5.) if the broadcast was successful, delete all logs in the replicated log up to the last included log
+			--> so we compact the log only when we know the broadcast received the minimum number of successful 
+				responses in the quorum
+*/
+
 func (snpService *SnapshotService) Snapshot() error {
 	lastAppliedLog, readErr := snpService.CurrentSystem.WAL.Read(snpService.CurrentSystem.LastApplied)
 	if readErr != nil { return readErr }
@@ -51,6 +71,16 @@ func (snpService *SnapshotService) Snapshot() error {
 	return nil
 }
 
+/*
+	Update Individual System
+		when a node restarts and rejoins the cluster or a new node is added
+			1.) set the node to send to busy so interactions with other followers continue
+			2.) create a snapshotrpc for the node that contains the last snapshot
+			2.) send the rpc to the node
+			3. if successful, update the next index for the node to the last included index
+				and set the system status to ready
+*/
+
 func (snpService *SnapshotService) UpdateIndividualSystem(host string) error {
 	s, _ := snpService.Systems.Load(host)
 	sys := s.(*system.System)
@@ -87,6 +117,19 @@ func (snpService *SnapshotService) UpdateIndividualSystem(host string) error {
 	return nil
 }
 
+/*
+	Shared Broadcast RPC function:
+		for requests to be broadcasted:
+			1.) send SnapshotRPCs in parallel to each follower in the cluster
+			2.) in each go routine handling each request, perform exponential backoff on failed requests until max retries
+			3.)
+				if err: remove system from system map and close all connections -- it has failed
+				if res:
+					if success:
+						--> update total successful replies
+			4.) if total successful responses are greater than minimum, return success, otherwise failed
+*/
+
 func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.Snapshot) (bool, error) {
 	aliveSystems, minResps := snpService.GetAliveSystemsAndMinSuccessResps()
 	successfulResps := int64(0)
@@ -118,6 +161,15 @@ func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.Sn
 		return false, nil 
 	}
 }
+
+/*
+	Client Append Entry RPC:
+		helper method for making individual rpc calls
+
+		perform exponential backoff
+		--> success: return successful response
+		--> error: remove system from system map and close all open connections
+*/
 
 func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, snapshot *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
 	conn, connErr := snpService.ConnectionPool.GetConnection(sys.Host, snpService.Port)
@@ -153,6 +205,18 @@ func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, snapsho
 
 	return res, nil
 }
+
+/*
+	SnapshotRPC
+		grpc server implementation
+
+		when snapshot is sent to the snapshotrpc server
+			1.) open a new file with the filepath included in the snapshot entry and write the compressed stream in the snapshot
+				to the file
+			2.) set the snapshot entry in the snapshot index in the replog bolt db for lookups
+			3.) if both complete, get the last included log in the replicated log and delete all logs up to it
+			4.) return response to leader
+*/
 
 func (snpService *SnapshotService) SnapshotRPC(ctx context.Context, req *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
 	writeErr := os.WriteFile(req.SnapshotFilePath, req.Snapshot, os.ModePerm)

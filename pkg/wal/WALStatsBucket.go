@@ -5,8 +5,14 @@ import bolt "go.etcd.io/bbolt"
 import "github.com/sirgallo/raft/pkg/stats"
 
 
-//=========================================== Write Ahead Log Snapshot Ops
+//=========================================== Write Ahead Log Stats Ops
 
+
+/*
+	Set Stat
+		set the latest statistic in the time series
+			--> keys are iso strings, so keys are stored earliest to latest
+*/
 
 func (wal *WAL) SetStat(statObj stats.Stats) error {
 	transaction := func(tx *bolt.Tx) error {
@@ -29,6 +35,11 @@ func (wal *WAL) SetStat(statObj stats.Stats) error {
 
 	return nil
 }
+
+/*
+	Get Stats
+		Get the current stats in the time series
+*/
 
 func (wal *WAL) GetStats() ([]stats.Stats, error) {
 	var statsArr []stats.Stats
@@ -56,6 +67,12 @@ func (wal *WAL) GetStats() ([]stats.Stats, error) {
 
 	return statsArr, nil
 }
+
+/*
+	Delete Stats
+		stats in the time series are limited to a fixed size, so when the size limit is hit,
+		delete the earliest keys up to the limit
+*/
 
 func (wal *WAL) DeleteStats() error {	
 	transaction := func(tx *bolt.Tx) error {

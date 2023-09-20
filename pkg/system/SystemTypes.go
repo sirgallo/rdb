@@ -23,7 +23,7 @@ type System struct {
 	WAL *wal.WAL
 	StateMachine *statemachine.StateMachine
 
-	NextIndex int64 // next index to send to a server
+	NextIndex int64
 
 	SystemMutex sync.Mutex
 }

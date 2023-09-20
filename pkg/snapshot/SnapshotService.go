@@ -9,12 +9,11 @@ import "github.com/sirgallo/raft/pkg/utils"
 import "google.golang.org/grpc"
 
 
-//=========================================== Leader Election Service
+//=========================================== Snapshot Service
 
 
 /*
 	create a new service instance with passable options
-	--> initialize state to Follower and initialize a random timeout period for leader election
 */
 
 func NewSnapshotService(opts *SnapshotServiceOpts) *SnapshotService {
@@ -50,6 +49,15 @@ func (snpService *SnapshotService) StartSnapshotService(listener *net.Listener) 
 
 	snpService.StartSnapshotListener()
 }
+
+/*
+	Snapshot Listener:
+		separate go routines:
+			1.) snapshot signal
+				--> if current leader, snapshot the state machine and then signal complete 
+			2.) update snapshot for node
+				--> if leader, send the latest snapshot on the system to the target follower
+*/
 
 func (snpService *SnapshotService) StartSnapshotListener() {
 	go func() {

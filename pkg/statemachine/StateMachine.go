@@ -8,7 +8,19 @@ import bolt "go.etcd.io/bbolt"
 import "github.com/sirgallo/raft/pkg/logger"
 
 
+//=========================================== State Machine
+
+
 var Log = clog.NewCustomLog(NAME)
+
+
+/*
+	State Machine
+		1.) open the db using the filepath 
+		2.) create the root bucket for the state machine
+		3.) create the collections for both storing all collection names and index names
+			associated with the collection.
+*/
 
 func NewStateMachine() (*StateMachine, error) {
 	homedir, homeErr := os.UserHomeDir()

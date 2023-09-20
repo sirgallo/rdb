@@ -23,7 +23,8 @@ import "github.com/sirgallo/raft/pkg/utils"
 			3.) if the request has a term lower than the current term of the system
 				--> return a failure response with the term of the system
 			4.) if the term of the replicated log on the system is not the term of the request or is not present
-				--> return a failure response, with the term and the index of the request - 1 to update NextIndex
+				--> return a failure response, with the earliest known index for the term, or from the latest term known on the 
+					follower to update NextIndex
 			5.) acknowledge that the request is legitimate and send signal to reset the leader election timeout
 			6.) for all of the entries of the incoming request
 				--> if the term of the replicated log associated with the index of the incoming entry is not the same
@@ -132,8 +133,12 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 
 /*
 	Handle Replicate Logs:
-		helper method used for both replicating the logs to the follower's replicated log and also for committing logs to
-		the state machine up to the leader's last commit index
+		helper method used for both replicating the logs to the follower's replicated log and also for applying logs to
+		the state machine up to the leader's last commit index or last known log on the system if it is less than the 
+		commit index of the leader
+
+		instead of appending one at a time, we can batch all of the log entries into a single bolt db transaction to reduce 
+		overhead and total transactions performed on the db, which should improve performance
 */
 
 func (rlService *ReplicatedLogService) HandleReplicateLogs(req *replogrpc.AppendEntry) (bool, error) {

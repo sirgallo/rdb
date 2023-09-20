@@ -13,13 +13,19 @@ import "github.com/sirgallo/raft/pkg/utils"
 /*
 	shared apply log utility function
 		1.) transform the logs to pass to the state machine
-		2.) pass the transformed entries into the log commit channel where logic will define interacting
-			with the state machine
+		2.) pass the transformed entries into the bulk apply function of the state machine, which will perform 
+			the state machine operations while applying the logs, returning back the responses to the clients' 
+			commands
 		3.) block until completed and failed entries are returned
 		4.) for all responses:
 			if the commit failed: throw an error since the the state machine was incorrectly committed to
 			if the commit completed: update the last applied field on the system to the index of the log
 				entry
+		5.) if the size of the replicated log has exceeded the threshold determined dynamically by available space
+			in the current mount and the current node is the leader, trigger a snapshot event to take a snapshot of
+			the current state to store and broadcast to all followers, also pause the replicated log and let buffer 
+			until the snapshot is complete. If a snapshot is performed, calculate the current system stats to update the
+			dynamic threshold for snapshotting
 */
 
 func (rlService *ReplicatedLogService) ApplyLogs() error {

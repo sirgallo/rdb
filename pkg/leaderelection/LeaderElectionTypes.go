@@ -28,11 +28,9 @@ type LeaderElectionService struct {
 	Port string
 	ConnectionPool *connpool.ConnectionPool
 
-	// Persistent State
 	CurrentSystem *system.System
 	Systems *sync.Map
 
-	// Module Level State
 	Timeout time.Duration
 	ElectionTimer *time.Timer
 

@@ -24,13 +24,11 @@ type ReplicatedLogService struct {
 	Port string
 	ConnectionPool *connpool.ConnectionPool
 
-	// Persistent State
 	CurrentSystem *system.System
 	Systems *sync.Map
-
+	
 	HeartBeatTimer *time.Timer
 
-	// Module Specific
 	AppendLogSignal chan statemachine.StateMachineOperation
 	LeaderAcknowledgedSignal chan bool
 	ResetTimeoutSignal chan bool

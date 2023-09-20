@@ -59,6 +59,15 @@ func (rService *RelayService) StartRelayService(listener *net.Listener) {
 	Relay Listener:
 		launch go routines for both relaying commands to the leader or appeneding to the failed
 		buffer for re-processing
+			1.) failed buffer
+				if a relay fails exponential backoff, add it to the failed buffer to reattempt
+			2.) relay channel
+				if a new command enters the relay channel, which occurs when a follower receives a request from a client,
+				send a relay of the command to the current leader
+			3.) relayed response channel
+				on responses to responses from the state machine, check the request id of the response and 
+				forward the state machine response to the request associated with the id
+				--> for leaders 
 */
 
 func (rService *RelayService) RelayListener() {
@@ -98,11 +107,10 @@ func (rService *RelayService) RelayListener() {
 /*
 	Relay Client RPC:
 		used by followers to relay commands to the leader for processing
-		1.) if leader is not set, return for retry
 		2.) encode the command to string
 		3.) attempt relay using exponential backoff
-		4.) if entry is not processed, return error
-		5.) otherwise, return success
+		4.) if entry is not processed and a response is not returned for the client, return error
+		5.) otherwise, forward the response to the client associated with the request id and return success
 */
 
 func (rService *RelayService) RelayClientRPC(cmd statemachine.StateMachineOperation) (*relayrpc.RelayResponse, error){
@@ -179,6 +187,11 @@ func (rService *RelayService) RelayClientRPC(cmd statemachine.StateMachineOperat
 			2.) decode the command
 			3.) if current system is leader, pass through to the replicated log module
 			4.) if system is not leader, append to the relay channel to be relayed again
+			5.) wait for a response from the channel associated with request id and once a response is received, 
+				return a response back to the relayed follower with the response to pass from the follower back to the
+				client
+				--> a context with timeout is created, and if the resp from the leader does not return before the 
+				timeout, a failed response is returned
 */
 
 func (rService *RelayService) RelayRPC(ctx context.Context, req *relayrpc.RelayRequest) (*relayrpc.RelayResponse, error) {
@@ -212,24 +225,32 @@ func (rService *RelayService) RelayRPC(ctx context.Context, req *relayrpc.RelayR
 		rService.Mutex.Lock()
 		rService.ClientMappedResponseChannel[cmd.RequestID] = &clientResponseChannel
 		rService.Mutex.Unlock()
-
+		
 		rService.RelayedAppendLogSignal <- *cmd 
-		resp :=<- clientResponseChannel
 
-		delete(rService.ClientMappedResponseChannel, resp.RequestID)
+		ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
+		defer cancel()
 
-		strResp, encErr := utils.EncodeStructToString[statemachine.StateMachineResponse](resp)
-		if encErr != nil {
-			failedResp := &relayrpc.RelayResponse{ ProcessedRequest: false }
-			return failedResp, encErr
+		select {
+			case <- ctx.Done():
+				delete(rService.ClientMappedResponseChannel, cmd.RequestID)
+			default:
+				resp :=<- clientResponseChannel
+				delete(rService.ClientMappedResponseChannel, cmd.RequestID)
+
+				strResp, encErr := utils.EncodeStructToString[statemachine.StateMachineResponse](resp)
+				if encErr != nil {
+					failedResp := &relayrpc.RelayResponse{ ProcessedRequest: false }
+					return failedResp, encErr
+				}
+		
+				successResp := &relayrpc.RelayResponse{ 
+					ProcessedRequest: true,
+					StateMachineResponse: strResp,
+				}
+		
+				return successResp, nil
 		}
-
-		successResp := &relayrpc.RelayResponse{ 
-			ProcessedRequest: true,
-			StateMachineResponse: strResp,
-		}
-
-		return successResp, nil
 	}
 
 	failedResp := &relayrpc.RelayResponse{ ProcessedRequest: false }

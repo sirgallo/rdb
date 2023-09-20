@@ -28,7 +28,6 @@ type RaftServiceOpts struct {
 }
 
 type RaftService struct {
-	// Persistent State
 	Protocol string
 	Ports RaftPortOpts
 	CurrentSystem *system.System
@@ -41,10 +40,6 @@ type RaftService struct {
 	Snapshot *snapshot.SnapshotService
 
 	CommandChannel chan statemachine.StateMachineOperation
-
-	// Volatile State
-	CommitIndex int64
-	LastApplied int64
 }
 
 

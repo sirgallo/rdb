@@ -64,11 +64,13 @@ func (rlService *ReplicatedLogService) StartReplicatedLogService(listener *net.L
 		separate go routines:
 			1.) heartbeat timeout
 				--> wait for timer to drain, signal heartbeat, and reset timer
-			2.) replicated log
+			2.) signal complete snapshot
+				--> when a snapshot has been completed, signal to unpause the replicated log
+			3.) replicated log
 				--> if a new log is signalled for append to the log, replicate the log to followers
-			3.) heartbeat
+			4.) heartbeat
 				--> on a set interval, heartbeat all of the followers in the cluster if leader
-			4.) sync logs
+			5.) sync logs
 				--> for systems with inconsistent replicated logs, start a separate go routine to sync
 					them back up to the leader
 */

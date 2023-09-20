@@ -244,6 +244,13 @@ func (wal *WAL) GetEarliest() (*log.LogEntry, error) {
 	return earliestLog, nil
 }
 
+/*
+	Delete Logs
+		create a read-write transaction for log compaction in the bucket
+			1.) for all logs up tothe last index, delete the key-value pair
+			2.) for each deleted, update the total keys and the total space removed from the log
+*/
+
 func (wal *WAL) DeleteLogs(endIndex int64) error {
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Replog)
@@ -282,11 +289,7 @@ func (wal *WAL) DeleteLogs(endIndex int64) error {
 /*
 	Get Total
 		create a read transaction for getting total keys in the bucket
-			1.) get the current bucket
-			2.) create a cursor for the bucket
-			3.) start from the first element in the bucket and iterate, monotonically increasing
-				the total keys
-			4.) return total keys
+			1.) read from the stats bucket and check the indexed total value
 */
 
 func (wal *WAL) GetTotal() (int, error) {
@@ -313,13 +316,9 @@ func (wal *WAL) GetTotal() (int, error) {
 }
 
 /*
-	Get Total
-		create a read transaction for getting total keys in the bucket
-			1.) get the current bucket
-			2.) create a cursor for the bucket
-			3.) start from the first element in the bucket and iterate, monotonically increasing
-				the total keys
-			4.) return total keys
+	Get Bucket Size In Bytes
+		create a read transaction for getting total size of the replicated log in bytes
+			1.) read from the stats bucket and check the indexed total size
 */
 
 func (wal *WAL) GetBucketSizeInBytes() (int64, error) {
@@ -344,6 +343,11 @@ func (wal *WAL) GetBucketSizeInBytes() (int64, error) {
 
 	return totalSize, nil
 }
+
+/*
+	Update Replog Stats
+		helper function for updating both the indexes for total keys and total size of the replicated log
+*/
 
 func (wal *WAL) UpdateReplogStats(bucket *bolt.Bucket, numUpdatedBytes int64, numUpdatedKeys int64, op StatOP) error {
 	statsBucketName := []byte(ReplogStats)
@@ -383,6 +387,11 @@ func (wal *WAL) UpdateReplogStats(bucket *bolt.Bucket, numUpdatedBytes int64, nu
 	return nil
 }
 
+/*
+	Get Indexed Entry For Term
+		For the given term, check the indexed value and to get the earliest known entry
+*/
+
 func (wal *WAL) GetIndexedEntryForTerm(term int64) (*log.LogEntry, error) {
 	var indexedEntry *log.LogEntry
 
@@ -411,6 +420,11 @@ func (wal *WAL) GetIndexedEntryForTerm(term int64) (*log.LogEntry, error) {
 	return indexedEntry, nil
 }
 
+/*
+	Append Helper
+		shared function for appending entries to the replicated log
+*/
+
 func (wal *WAL) appendHelper(bucket *bolt.Bucket, entry *log.LogEntry) (int64, int64, error) {
 	walBucketName := []byte(ReplogWAL)
 	walBucket := bucket.Bucket(walBucketName)
@@ -428,6 +442,11 @@ func (wal *WAL) appendHelper(bucket *bolt.Bucket, entry *log.LogEntry) (int64, i
 
 	return totalBytesAdded, totalKeysAdded, nil
 }
+
+/*
+	Get Latest Indexed Entry
+		get the earliest known entry for the latest term known in the cluster
+*/
 
 func (wal *WAL) getLatestIndexedEntry(bucket *bolt.Bucket) (*log.LogEntry, error) {
 	indexBucketName := []byte(ReplogIndex)
@@ -447,6 +466,10 @@ func (wal *WAL) getLatestIndexedEntry(bucket *bolt.Bucket) (*log.LogEntry, error
 
 	return entry, nil
 }
+
+/*
+	When a higher term than previously known is discovered, update the index to include the first entry associated with term
+*/
 
 func (wal *WAL) setIndexForFirstLogInTerm(bucket *bolt.Bucket, newEntry *log.LogEntry, previousIndexed *log.LogEntry) (*log.LogEntry, error) {
 	if newEntry.Term > previousIndexed.Term {

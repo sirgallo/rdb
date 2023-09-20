@@ -2,60 +2,49 @@ package statemachine
 
 import bolt "go.etcd.io/bbolt"
 import "github.com/google/uuid"
+import "strings"
 
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-func (sm *StateMachine) Find(op *StateMachineOperation) (*StateMachineResponse, error) {
-	var resp *StateMachineResponse
+//=========================================== State Machine Operations
 
-	transaction := func(tx *bolt.Tx) error {
-		rootName := []byte(RootBucket)
-		root := tx.Bucket(rootName)
 
-		searchResp, searchErr := sm.searchInCollection(root, &op.Payload)
-		if searchErr != nil { return searchErr }
+/*
+	Bulk Apply
+		operation to apply logs to the state machine and perform operations on it
+			--> the process of applying log entries from the replicated log performs the operation on the state machine,
+				which will also return a response back to the client that issued the command included in the log entry
+			
+		The operation is a struct which contains both the operation to perform and the payload included
+			--> the payload includes the collection to be operated on as well as the value to update
 
-		resp = searchResp
+		FIND
+			perform a lookup on a value. The key does not need to be known, and the value to look for is passed in the payload
+			--> the value is indexed in a separate collection, which points to the key that is associated with the value. Keys are dynamically 
+					generated on inserts and do not need be known to the user. The key can be seen more as a UUID
 
-		return nil
-	}
+		INSERT
+			perform an insert for a value in a collection
+			--> on inserts, first a UUID is generated as the key for the value in the collection. Then, values are inserted into appropriate
+				indexes. Since BoltDb utilizes a B+ tree as its primary data structure, key-value pairs are sorts by default. We can utilize this to
+				create indexes for our collections, where values become the primary key and the value becomes the uuid of the object in the collection,
+				so essentially we can point directly to the location in the collection from a given index
+		
+		DELETE
+			perform a delete for a value in a collection
+			--> this involes first doing a lookup on the index for the object to be deleted, and then removing both the original element from the
+			collection and all associated indexes
 
-	findErr := sm.DB.View(transaction)
-	if findErr != nil { return nil, findErr }
-
-	resp.RequestID = op.RequestID
-	resp.RequestOrigin = op.RequestOrigin
-
-	return resp, nil
-}
-
-func (sm *StateMachine) Insert(op *StateMachineOperation) (*StateMachineResponse, error) {
-	var resp *StateMachineResponse
-
-	transaction := func(tx *bolt.Tx) error {
-		rootName := []byte(RootBucket)
-		root := tx.Bucket(rootName)
-
-		_, createCollectionErr := sm.createCollection(root, op.Payload.Collection)
-		if createCollectionErr != nil { return createCollectionErr }
-
-		insertResp, insertErr := sm.insertIntoCollection(root, &op.Payload)
-		if insertErr != nil { return insertErr}
-
-		resp = insertResp
-
-		return nil
-	}
-
-	insertErr := sm.DB.Update(transaction)
-	if insertErr != nil { return nil, insertErr }
-
-	resp.RequestID = op.RequestID
-	resp.RequestOrigin = op.RequestOrigin
-
-	return resp, nil
-}
+		DROP COLLECTION
+			perform a collection drop
+			--> pass the collection to be dropped, and it will be removed from the root database bucket. All associated indexes are removed and 
+			the reference to the names of the collection and indexes are removed from the collection and index buckets in root
+		
+		LIST COLLECTIONS
+			get all available collections on the state machine
+			--> do a lookup on the collection bucket and get all collections names
+*/
 
 func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachineResponse, error) {
 	responses := []*StateMachineResponse{}
@@ -100,6 +89,14 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				dropResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, dropResp)
+			}	else if op.Action == LISTCOLLECTIONS {
+				listResp, listErr := sm.listCollections(root, &op.Payload)
+				if listErr != nil { return listErr }
+
+				listResp.RequestID = op.RequestID
+				listResp.RequestOrigin = op.RequestOrigin
+
+				responses = append(responses, listResp)
 			}
 		}
 
@@ -112,79 +109,26 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 	return responses, nil
 }
 
-func (sm *StateMachine) Delete(op *StateMachineOperation) (*StateMachineResponse, error) {
-	var resp *StateMachineResponse
+/*
+	All functions below are helper functions for each of the above state machine operations
+*/
 
-	transaction := func(tx *bolt.Tx) error {
-		rootName := []byte(RootBucket)
-		root := tx.Bucket(rootName)
+func (sm *StateMachine) listCollections(bucket *bolt.Bucket, payload *StateMachineOpPayload) (*StateMachineResponse, error) {
+	var collections []string
 
-		_, createCollectionErr := sm.createCollection(root, op.Payload.Collection)
-		if createCollectionErr != nil { return createCollectionErr }
+	collectionBucketName := []byte(CollectionBucket)
+	collectionBucket := bucket.Bucket(collectionBucketName)
 
-		deleteResp, deleteErr := sm.deleteFromCollection(root, &op.Payload)
-		if deleteErr != nil { return deleteErr }
+	cursor := collectionBucket.Cursor()
 
-		resp = deleteResp
-
-		return nil
+	for key, val := cursor.First(); key != nil; key, val = cursor.Next() {
+		collections = append(collections, string(val))
 	}
 
-	deleteErr := sm.DB.Update(transaction)
-	if deleteErr != nil { return nil, deleteErr }
 
-	resp.RequestID = op.RequestID
-	resp.RequestOrigin = op.RequestOrigin
-
-	return resp, nil
-}
-
-func (sm *StateMachine) DropCollection(op *StateMachineOperation) (*StateMachineResponse, error) {
-	var resp *StateMachineResponse
-
-	transaction := func(tx *bolt.Tx) error {
-		rootName := []byte(RootBucket)
-		root := tx.Bucket(rootName)
-		
-		dropResp, dropErr := sm.dropCollection(root, &op.Payload)
-		if dropErr != nil { return dropErr }
-
-		resp = dropResp 
-		return nil
-	}
-
-	dropErr := sm.DB.Update(transaction)
-	if dropErr != nil { return nil, dropErr }
-
-	resp.RequestID = op.RequestID
-	resp.RequestOrigin = op.RequestOrigin
-
-	return resp, nil
-}
-
-func (sm *StateMachine) ListCollections(op *StateMachineOperation) ([]string, error) {
-	var resp []string
-
-	transaction := func(tx *bolt.Tx) error {
-		rootName := []byte(RootBucket)
-		root := tx.Bucket(rootName)
-
-		collectionBucketName := []byte(CollectionBucket)
-		collectionBucket := root.Bucket(collectionBucketName)
-
-		cursor := collectionBucket.Cursor()
-
-		for key, val := cursor.First(); key != nil; key, val = cursor.Next() {
-			resp = append(resp, string(val))
-		}
-
-		return nil
-	}
-
-	listErr := sm.DB.View(transaction)
-	if listErr != nil { return nil, listErr }
-
-	return resp, nil
+	return &StateMachineResponse{
+		Value: strings.Join(collections, ", "),
+	}, nil
 }
 
 func (sm *StateMachine) generateKey() []byte {
