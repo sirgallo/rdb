@@ -52,7 +52,7 @@ All code has been documented to make reasoning and readability more straightforw
 
 This implementation includes `docker-compose` configuration for running a cluster locally. The `compose` file will run a cluster of 5 raft nodes, as well as a forward facing `haproxy` instance as the loadbalancer to send requests to.
 
-First, ensure `docker engine`` and `docker compose` are installed on your system (for `macos`, this involves installing `docker desktop`). [Click Here](https://www.docker.com/products/docker-desktop/) to download the latest version of `docker desktop`.
+First, ensure `docker engine` and `docker compose` are installed on your system (for `macos`, this involves installing `docker desktop`). [Click Here](https://www.docker.com/products/docker-desktop/) to download the latest version of `docker desktop`.
 
 The basic implementation to run the cluster and the associated `docker` resources are located under [cmd](./cmd)
 
