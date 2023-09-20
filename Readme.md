@@ -18,9 +18,13 @@ The Raft Service is separated into modules, all of which are meant to be able to
 To learn more about each, check out:
 
 [Leader Election](./docs/LeaderElection.md) 
+
 [Replicated Log](./docs/ReplicatedLog.md)
+
 [Relay](./docs/RelayModule.md)
+
 [Snapshot](./docs/Snapshot.md)
+
 [HTTPModule](./docs/Client.md)
 
 
@@ -34,7 +38,14 @@ The protocol buffer schemas are as follows:
 All schemas can be found under [proto](./proto).
 
 
-All code has been documented to make reasoning and readability of the code more straightforward. Going through the modules will give more in depth explainations of the algorithm than the documentation will.
+For more information regarding the replicated log and state machine, check out:
+
+[WAL](./docs/WAL.md)
+
+[StateMachine](./docs/StateMachine.md)
+
+
+All code has been documented to make reasoning and readability more straightforward. Going through the modules will give more in depth explainations of the algorithm than the documentation will.
 
 
 ## Deployment
