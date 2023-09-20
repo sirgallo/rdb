@@ -32,6 +32,11 @@ The underlying data structure for `BoltDB` uses B+ tree, making it suitable for 
 The replicated log is contained under a `replog` bucket, where all key-value pairs are the index as the key, and the log entry as the value, where the key will increase monotonically with the log entries as they are applied. 
 
 
+# Indexes
+
+A separate sub bucket in the replicated log bucket is kept that tracks all of the first entry for each term. This is useful for nodes that have failed and are brought back into the cluster or new nodes are added since it helps reduce the number of failed AppendEntryRPCs between the node and leader as the node is brought back online.
+
+
 ## Sources
 
 [WAL](../pkg/wal/WAL.go)

@@ -9,7 +9,9 @@ A third module is added to the raft module, which is the relay module. This is b
   2. prepare a relayrpc request and send the command to the current leader
   3. if the request fails, add to the failed buffer to retry
   4. if the request is sent to another follower, have that follower forward the log to the leader
-  5. otherwise success
+  5. wait for a response back from the leader
+  6. if a response from operating on the state machine is returned before the timeout, return the response 
+    back to the follower so it can be forwarded back to the client that issued it
 
 
 ## Sources
