@@ -34,6 +34,7 @@ services:
       - 54322
       - 54323
       - 54324
+      - 54325
     volumes:
       - $HOME/raftsrv1/replog:/home/raft/replog
       - $HOME/raftsrv1/statemachine:/home/raft/statemachine
@@ -52,6 +53,7 @@ services:
       - 54322
       - 54323
       - 54324
+      - 54325
     volumes:
       - $HOME/raftsrv2/replog:/home/raft/replog
       - $HOME/raftsrv2/statemachine:/home/raft/statemachine
@@ -70,6 +72,7 @@ services:
       - 54322
       - 54323
       - 54324
+      - 54325
     volumes:
       - $HOME/raftsrv3/replog:/home/raft/replog
       - $HOME/raftsrv3/statemachine:/home/raft/statemachine
@@ -88,6 +91,7 @@ services:
       - 54322
       - 54323
       - 54324
+      - 54325
     volumes:
       - $HOME/raftsrv4/replog:/home/raft/replog
       - $HOME/raftsrv4/statemachine:/home/raft/statemachine
@@ -106,6 +110,7 @@ services:
       - 54322
       - 54323
       - 54324
+      - 54325
     volumes:
       - $HOME/raftsrv5/replog:/home/raft/replog
       - $HOME/raftsrv5/statemachine:/home/raft/statemachine

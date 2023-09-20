@@ -1,11 +1,11 @@
-package relay
+package forwardresp
 
 import "net"
 
 import "github.com/sirgallo/raft/pkg/logger"
-import "github.com/sirgallo/raft/pkg/relayrpc"
+import "github.com/sirgallo/raft/pkg/forwardresprpc"
 import "github.com/sirgallo/raft/pkg/statemachine"
-import "github.com/sirgallo/raft/pkg/system"
+// import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 import "google.golang.org/grpc"
 
@@ -17,18 +17,18 @@ import "google.golang.org/grpc"
 	create a new service instance with passable options
 */
 
-func NewRelayService(opts *RelayOpts) *RelayService {
-	rService := &RelayService{
+func NewForwardRespService(opts *ForwardRespOpts) *ForwardRespService {
+	frService := &ForwardRespService{
 		Port: utils.NormalizePort(opts.Port),
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		RelayChannel: make(chan statemachine.StateMachineOperation, RelayChannelBuffSize),
-		RelayedAppendLogSignal: make(chan statemachine.StateMachineOperation),
+		LeaderRelayResponseChannel: make(chan statemachine.StateMachineResponse, RelayRespBuffSize),
+		ForwardRespChannel: make(chan statemachine.StateMachineResponse, ForwardRespChannel),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
-	return rService
+	return frService
 }
 
 /*
@@ -37,17 +37,17 @@ func NewRelayService(opts *RelayOpts) *RelayService {
 		--> start the pass through for entries from follower to leader
 */
 
-func (rService *RelayService) StartRelayService(listener *net.Listener) {
+func (frService *ForwardRespService) StartForwardRespService(listener *net.Listener) {
 	srv := grpc.NewServer()
-	rService.Log.Info("relay gRPC server is listening on port:", rService.Port)
-	relayrpc.RegisterRelayServiceServer(srv, rService)
+	frService.Log.Info("forward resp gRPC server is listening on port:", frService.Port)
+	forwardresprpc.RegisterForwardRespServiceServer(srv, frService)
 
 	go func() {
 		err := srv.Serve(*listener)
-		if err != nil { rService.Log.Error("Failed to serve:", err.Error()) }
+		if err != nil { frService.Log.Error("Failed to serve:", err.Error()) }
 	}()
 
-	rService.RelayListener()
+	frService.ForwardListener()
 }
 
 /*
@@ -65,23 +65,12 @@ func (rService *RelayService) StartRelayService(listener *net.Listener) {
 				--> for leaders 
 */
 
-func (rService *RelayService) RelayListener() {
-	failedBuffer := make(chan statemachine.StateMachineOperation, FailedBuffSize)
-	
-	go func() {
-		cmd :=<- failedBuffer
-		if rService.CurrentSystem.State == system.Follower {
-			rService.RelayChannel <- cmd
-		} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- cmd }
-	}()
-
-	go func() {
+func (frService *ForwardRespService) ForwardListener() {
+	go func(){
 		for {
-			cmd :=<- rService.RelayChannel
-			if rService.CurrentSystem.State == system.Follower {
-				_, err := rService.RelayClientRPC(cmd)
-				if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry", err.Error()) }
-			}
+			response :=<- frService.LeaderRelayResponseChannel
+			_, forwardErr := frService.ForwardRespClientRPC(response)
+			if forwardErr != nil { frService.Log.Error("unable to forward response back to origin:", forwardErr.Error()) }
 		}
 	}()
 }

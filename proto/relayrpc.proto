@@ -15,5 +15,4 @@ message RelayRequest {
 
 message RelayResponse {
   bool ProcessedRequest = 1;
-  string StateMachineResponse = 2;
 }

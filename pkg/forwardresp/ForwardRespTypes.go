@@ -1,16 +1,16 @@
-package relay
+package forwardresp
 
 import "sync"
 import "time"
 
-import "github.com/sirgallo/raft/pkg/relayrpc"
+import "github.com/sirgallo/raft/pkg/forwardresprpc"
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/connpool"
 import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-type RelayOpts struct {
+type ForwardRespOpts struct {
 	Port int
 	ConnectionPool *connpool.ConnectionPool
 
@@ -19,8 +19,8 @@ type RelayOpts struct {
 	Systems *sync.Map
 }
 
-type RelayService struct {
-	relayrpc.UnimplementedRelayServiceServer
+type ForwardRespService struct {
+	forwardresprpc.UnimplementedForwardRespServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool
 	Mutex sync.Mutex
@@ -28,17 +28,14 @@ type RelayService struct {
 	CurrentSystem *system.System
 	Systems *sync.Map
 
-	RelayChannel chan statemachine.StateMachineOperation
-	RelayedAppendLogSignal chan statemachine.StateMachineOperation
+	LeaderRelayResponseChannel chan statemachine.StateMachineResponse
+	ForwardRespChannel chan statemachine.StateMachineResponse
 
 	Log clog.CustomLog
 }
 
+const NAME = "Forward Response"
+const RPCTimeout = 50 * time.Millisecond
 
-const NAME = "Relay"
-const RPCTimeout = 150 * time.Millisecond
-
-const RelayChannelBuffSize = 100000
-const FailedBuffSize = 10000
 const RelayRespBuffSize = 100000
 const ForwardRespChannel = 100000

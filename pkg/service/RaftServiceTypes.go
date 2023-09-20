@@ -3,6 +3,7 @@ package service
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/connpool"
+import "github.com/sirgallo/raft/pkg/forwardresp"
 import "github.com/sirgallo/raft/pkg/httpservice"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
@@ -17,6 +18,7 @@ type RaftPortOpts struct {
 	LeaderElection int
 	ReplicatedLog int
 	Relay int
+	ForwardResp int
 	Snapshot int
 }
 
@@ -37,6 +39,7 @@ type RaftService struct {
 	LeaderElection *leaderelection.LeaderElectionService
 	ReplicatedLog *replog.ReplicatedLogService
 	Relay *relay.RelayService
+	ForwardResp *forwardresp.ForwardRespService
 	Snapshot *snapshot.SnapshotService
 
 	CommandChannel chan statemachine.StateMachineOperation

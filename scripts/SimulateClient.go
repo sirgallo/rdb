@@ -6,11 +6,9 @@ import "crypto/tls"
 import "encoding/base64"
 import "encoding/json"
 import "io"
-// import mathRand "math/rand"
 import "net/http"
 import "os"
 import "sync"
-// import "time"
 
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/statemachine"
@@ -43,7 +41,7 @@ func main() {
 
 	var clientWG sync.WaitGroup
 
-	for range make([]int, 256) {
+	for range make([]int, 40) {
 		clientWG.Add(1)
 
 		go func() {
@@ -56,21 +54,6 @@ func main() {
 					},
 				},
 			}
-
-			/*
-			sendRequestSignal := make(chan bool)
-	
-			
-			go func() {
-				for {
-					sendRequestSignal <- true
-		
-					randomNumber := mathRand.Intn(5) + 1
-					time.Sleep(time.Duration(randomNumber) * time.Second)
-					//time.Sleep(time.Duration(500) * time.Microsecond)
-				}
-			}()
-			*/
 		
 			for {
 				var reqWG sync.WaitGroup
@@ -117,10 +100,6 @@ func main() {
 
 				reqWG.Wait()
 			}
-
-			// randomNumber := mathRand.Intn(5) + 1
-			// time.Sleep(time.Duration(randomNumber) * time.Second)
-
 		}()
 	}
 
