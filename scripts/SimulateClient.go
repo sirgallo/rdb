@@ -9,7 +9,8 @@ import "io"
 // import mathRand "math/rand"
 import "net/http"
 import "os"
-import "time"
+import "sync"
+// import "time"
 
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/statemachine"
@@ -37,64 +38,93 @@ func main() {
 
 	hostname, hostErr := os.Hostname()
 	if hostErr != nil { Log.Fatal("unable to get hostname") }
-	
-	sendRequestSignal := make(chan bool)
+
 	url := func () string { return "https://" + hostname + "/command" }()
-	
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
-	}
 
-	go func() {
-		for {
-			sendRequestSignal <- true
+	var clientWG sync.WaitGroup
 
-			// randomNumber := mathRand.Intn(96) + 5
-			// time.Sleep(time.Duration(randomNumber) * time.Millisecond)
-			time.Sleep(time.Duration(500) * time.Microsecond)
-		}
-	}()
+	for range make([]int, 256) {
+		clientWG.Add(1)
 
-	for {
-		<- sendRequestSignal
 		go func() {
-			randString, randErr := genRandomString(STRING_LENGTH)
-			if randErr != nil { Log.Fatal("failed to generate random string:", randErr.Error()) }
+			defer clientWG.Done()
 			
-			request := &statemachine.StateMachineOperation{
-				Action: "insert",
-				Payload: statemachine.StateMachineOpPayload{
-					Collection: "test",
-					Value: randString,
+			client := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+					},
 				},
 			}
-	
-			requestJSON, encErr := json.Marshal(request)
-			if encErr != nil { Log.Fatal("failed to encode request to json", encErr.Error()) }
-			
-			requestBuffer := bytes.NewBuffer(requestJSON)
-			r, respErr := client.Post(url, CONTENT_TYPE, requestBuffer)
-			if respErr != nil { Log.Fatal(respErr.Error()) }
-	
-			defer r.Body.Close()
-			
-			if r.StatusCode != 200 {
-				responseBody, _ := io.ReadAll(r.Body)
-				Log.Warn("status not 200", string(responseBody))
 
-				return 
+			/*
+			sendRequestSignal := make(chan bool)
+	
+			
+			go func() {
+				for {
+					sendRequestSignal <- true
+		
+					randomNumber := mathRand.Intn(5) + 1
+					time.Sleep(time.Duration(randomNumber) * time.Second)
+					//time.Sleep(time.Duration(500) * time.Microsecond)
+				}
+			}()
+			*/
+		
+			for {
+				var reqWG sync.WaitGroup
+
+				reqWG.Add(1)
+				
+				go func() {
+					defer reqWG.Done()
+
+					randString, randErr := genRandomString(STRING_LENGTH)
+					if randErr != nil { Log.Fatal("failed to generate random string:", randErr.Error()) }
+					
+					request := &statemachine.StateMachineOperation{
+						Action: "insert",
+						Payload: statemachine.StateMachineOpPayload{
+							Collection: "test",
+							Value: randString,
+						},
+					}
+			
+					requestJSON, encErr := json.Marshal(request)
+					if encErr != nil { Log.Fatal("failed to encode request to json", encErr.Error()) }
+					
+					requestBuffer := bytes.NewBuffer(requestJSON)
+					r, respErr := client.Post(url, CONTENT_TYPE, requestBuffer)
+					if respErr != nil { Log.Fatal(respErr.Error()) }
+			
+					defer r.Body.Close()
+					
+					if r.StatusCode != 200 {
+						responseBody, _ := io.ReadAll(r.Body)
+						Log.Warn("status not 200", string(responseBody))
+		
+						return 
+					}
+		
+					var response *statemachine.StateMachineResponse
+			
+					decodeErr := json.NewDecoder(r.Body).Decode(&response)
+					if decodeErr != nil { Log.Fatal("failed to decode response", decodeErr.Error()) }
+			
+					Log.Debug("response:", response)
+				}()
+
+				reqWG.Wait()
 			}
 
-			var response *statemachine.StateMachineResponse
-	
-			decodeErr := json.NewDecoder(r.Body).Decode(&response)
-			if decodeErr != nil { Log.Fatal("failed to decode response", decodeErr.Error()) }
-	
-			Log.Debug("response:", response)
+			// randomNumber := mathRand.Intn(5) + 1
+			// time.Sleep(time.Duration(randomNumber) * time.Second)
+
 		}()
 	}
+
+	clientWG.Wait()
+
+	select{}
 }
