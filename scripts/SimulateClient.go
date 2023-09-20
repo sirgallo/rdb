@@ -40,6 +40,14 @@ func main() {
 	
 	sendRequestSignal := make(chan bool)
 	url := func () string { return "https://" + hostname + "/command" }()
+	
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
 
 	go func() {
 		for {
@@ -54,14 +62,6 @@ func main() {
 	for {
 		<- sendRequestSignal
 		go func() {
-			client := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						InsecureSkipVerify: true,
-					},
-				},
-			}
-
 			randString, randErr := genRandomString(STRING_LENGTH)
 			if randErr != nil { Log.Fatal("failed to generate random string:", randErr.Error()) }
 			

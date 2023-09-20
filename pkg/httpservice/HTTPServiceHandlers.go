@@ -60,9 +60,8 @@ func (httpService *HTTPService) RegisterCommandRoute() {
 			requestData.RequestID = hash
 			requestData.RequestOrigin = httpService.CurrentSystem.Host
 
-			clientResponseChannel := make(chan statemachine.StateMachineResponse)
-
 			httpService.Mutex.Lock()
+			clientResponseChannel := make(chan statemachine.StateMachineResponse)
 			httpService.ClientMappedResponseChannel[requestData.RequestID] = &clientResponseChannel
 			httpService.Mutex.Unlock()
 
