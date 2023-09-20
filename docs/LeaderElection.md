@@ -13,7 +13,6 @@ Raft Consensus uses a single leader, many follower design, where a client intera
 Leaders maintain consensus with the other followers within the cluster through a heartbeat protocol, in which the leader emits an empty request to each follower in the cluster. Each follower has a timeout period, between `150-300ms`, which is initialized on startup of each system, and is randomized between followers so as to avoid multiple systems attempting to requests votes during an election period at the same time. If a follower does not receive a heartbeat during the period, it changes it's state to candidate and requests votes from each system in the cluster.
 
 A leader is elected when it receives the majority of votes during an election process, so:
-
 ```
   majority votes = floor(n / 2) + 1
 ```
@@ -23,7 +22,6 @@ Let's say we have 5 nodes, then for a follower to become leader on initial start
 In this doc, the focus will be on the `RequestVoteRPC`, which is the remote procedure call used to request votes from other systems during an election phase.
 
 The general layout of the request is:
-
 ```proto
 message RequestVote {
   int64 CurrentTerm = 1;
@@ -44,7 +42,6 @@ To learn more about the Replicated Log, visit [ReplicatedLog](./ReplicatedLog.md
 ## Algorithm
 
 The basic algorithm is as follows:
-
 ```
 Followers wait for an AppendEntryRPC during their timeout periods
 

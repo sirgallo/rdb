@@ -5,6 +5,7 @@ import "encoding/json"
 import "net/http"
 
 import "github.com/sirgallo/raft/pkg/statemachine"
+import "github.com/sirgallo/raft/pkg/utils"
 
 
 //=========================================== Snapshot Service Handlers
@@ -50,7 +51,13 @@ func (httpService *HTTPService) RegisterCommandRoute() {
 				return
 			}
 
-			requestData.RequestID = httpService.GenerateRequestUUID()
+			hash, hashErr := utils.GenerateRandomSHA256Hash()
+			if hashErr != nil {
+				http.Error(w, "error producing hash for request id", http.StatusBadRequest)
+				return
+			}
+
+			requestData.RequestID = hash
 			requestData.RequestOrigin = httpService.CurrentSystem.Host
 
 			clientResponseChannel := make(chan statemachine.StateMachineResponse)

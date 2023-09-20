@@ -4,7 +4,6 @@ import "compress/gzip"
 import "io"
 import "os"
 import "path/filepath"
-import "github.com/google/uuid"
 
 import bolt "go.etcd.io/bbolt"
 
@@ -27,7 +26,9 @@ func (sm *StateMachine) SnapshotStateMachine() (string, error) {
 	homedir, homeErr := os.UserHomeDir()
 	if homeErr != nil { return utils.GetZero[string](), homeErr }
 
-	snapshotFileName := sm.generateFilename()
+	snapshotFileName, fileNameErr := sm.generateFilename()
+	if fileNameErr != nil { return utils.GetZero[string](), fileNameErr }
+
 	snapshotPath := filepath.Join(homedir, SubDirectory, snapshotFileName)
 
 	snapshotFile, fCreateErr := os.Create(snapshotPath)
@@ -64,7 +65,7 @@ func (sm *StateMachine) ReplaySnapshot(snapshotPath string) error {
 	homedir, homeErr := os.UserHomeDir()
 	if homeErr != nil { return homeErr }
 
-	dbPath := filepath.Join(homedir, SubDirectory, FileName)
+	dbPath := filepath.Join(homedir, SubDirectory, DbFileName)
 
 	gzippedSnapshotFile, openErr := os.Open(snapshotPath)
 	if openErr != nil { return openErr }
@@ -100,8 +101,13 @@ func (sm *StateMachine) ReplaySnapshot(snapshotPath string) error {
 		--> generate the snapshot name, which is dbname_uniqueID
 */
 
-func (sm *StateMachine) generateFilename() string {
-	id := uuid.New()
+func (sm *StateMachine) generateFilename() (string, error) {
+	hash, hashErr := utils.GenerateRandomSHA256Hash()
+	if hashErr != nil { return utils.GetZero[string](), hashErr }
 
-	return FileName + "_" + id.String()
+	snapshotName := func() string {
+		return FileNamePrefix + "_" + hash + ".gz"
+	}()
+
+	return snapshotName, nil
 }

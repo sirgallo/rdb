@@ -11,7 +11,6 @@ One of the major components of [Raft Consensus](https://raft.github.io/raft.pdf)
 In this doc, the focus will be on the `AppendEntryRPC`, which is the remote procedure call used to request votes from other systems during an election phase.
 
 The general layout of the request is:
-
 ```proto
 message AppendEntry {
   int64 Term = 1;
@@ -31,7 +30,6 @@ message AppendEntry {
 6. LeaderCommitIndex --> the index of the latest log applied to the state machine by the leader
 
 The `LogEntry` message consists of:
-
 ```proto
 message LogEntry {
   int64 Index = 1;
@@ -51,7 +49,6 @@ When a leader is elected, it begins sending heartbeats to each node at a set inv
 ## Algorithm
 
 The basic algorithm is as follows:
-
 ```
 Leader node in the cluster -->
 

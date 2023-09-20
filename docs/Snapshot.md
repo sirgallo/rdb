@@ -52,13 +52,14 @@ essentially, a backup is being created, which systems can use to restore state m
 
 Since the state machine uses `BoltDb` as the underlying database technology, snapshots become as simple as taking a backup of the current database. This writes the entire content of the original database file to a new file, essentially just creating a copy. This copy is then compressed and all logs in the replicated log up the last applied are removed.
 
-While some implementations use a static, fixed interval for snapshotting and log compaction based on a value like the log size or a timeframe, this implementation takes a more dynamic approach. The algorithm is as follows:
-
+While some implementations use a static, fixed interval for snapshotting and log compaction based on a value such as the log size or a timeframe, this implementation takes a more dynamic approach. The algorithm is as follows:
+```
   1. Determine the available space on the current mount where the database and log are written to
   2. if the database and log exceed the maximum size in bytes calculated by available space in bytes / fraction of available space to use, snapshot
   3. Recalculate available space on the drive for the next calculation for snapshotting
+```
 
-This approach looks to limit log size the more the drive starts to fill up on the system, so over time if the drive fills up, the overall size the log can be will shrink to decrease the need to perform system maintenance to free space for the raft nodes. This should also increase the longevity of the cluster.
+This looks to limit log size the more the drive starts to fill up on the system, so over time if the drive fills up, the overall size the log can be will shrink to decrease the need to perform system maintenance to free space for the raft nodes. This should also increase the longevity of the cluster.
 
 
 ## Replay

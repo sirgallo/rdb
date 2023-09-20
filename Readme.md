@@ -52,11 +52,11 @@ All code has been documented to make reasoning and readability more straightforw
 
 This implementation includes `docker-compose` configuration for running a cluster locally. The `compose` file will run a cluster of 5 raft nodes, as well as a forward facing `haproxy` instance as the loadbalancer to send requests to.
 
-First, ensure docker engine and docker compose are installed on your system (for `macos`, this involves installing docker desktop). [Click Here](https://www.docker.com/products/docker-desktop/) to download the latest version of docker desktop.
+First, ensure `docker engine`` and `docker compose` are installed on your system (for `macos`, this involves installing `docker desktop`). [Click Here](https://www.docker.com/products/docker-desktop/) to download the latest version of `docker desktop`.
 
-The basic implementation to run the cluster and the associated docker resources are located under [cmd](./cmd)
+The basic implementation to run the cluster and the associated `docker` resources are located under [cmd](./cmd)
 
-Once docker desktop is installed, run the following to deploy locally (on `macos`):
+Once `docker desktop` is installed, run the following to deploy locally (on `macos`):
 
   1. Make sure HOSTNAME is set in ~/.zshrc and registered in /etc/hosts
 
@@ -88,7 +88,7 @@ openssl req -newkey rsa:2048 -new -x509 -days 365 -nodes -out $HOSTNAME.crt -key
 cat $HOSTNAME.key $HOSTNAME.crt > $HOSTNAME.pem
 ```
 
-docker-compose will then bind the certs from your local machine to the certs folder on the haproxy container. Your hostname will also be bound as the hostname of the container
+`docker-compose` will then bind the certs from your local machine to the certs folder on the haproxy container. Your hostname will also be bound as the hostname of the container
 
   3. Run the startupDev.sh script
 
@@ -103,10 +103,51 @@ This will build the services and then start them.
 
 At this point, you can begin interacting with the cluster by sending it commands to perform on the state machine. 
 
+To stop the cluster, run the `./stopDev.sh` script:
+```bash
+chmod +x ./stopDev.sh
+./stopDev.sh
+```
+
+Stopping the cluster will bring down all of the services, but the volumes for each raft node are bound to the host machine for persistence. By default, the docker-compose file will create the volumes under your `$HOME` directory. 
+
+For the replicated log db file, the path is:
+```bash
+$HOME/<raft-node-name>/replog/replog.db
+```
+
+For the statemachine db file, the path is:
+```bash
+$HOME/<raft-node-name>/statemachine/statemachine.db
+```
+
+Snapshots are stored under the same directory as the statemachine db file, with the following file format:
+```
+statemachine_hash.gz
+```
+
+To interact with the db files on the command line, the `bbolt` command line tool can be installed. This can be used to inspect existing buckets, stats, and information regarding the db. To install, run:
+
+```bash
+go get go.etcd.io/bbolt@latest
+```
+
+then run:
+```bash
+bbolt -h
+```
+
+This will give basic information regarding available commands to run against the db file.
+
+If you want to remove the db files and snapshots, simply run:
+```bash
+rm -rf $HOME/raftsrv*
+```
+
 
 ## Interacting with the Cluster
 
-The statemachine expects a commands with the following structure:
+The statemachine expects commands with the following structure:
 
   1. Request
 
@@ -134,7 +175,6 @@ The Request is a `POST` request, which will send the request object to:
 ```
 https://<your-host>/command
 ```
-
 
 Here are the available commands, using `curl` to send requests to the cluster:
 
@@ -195,7 +235,7 @@ curl --location 'https://<your-host>/command' \
 ```
 
 
-## To come
+## To Come
 
 The database is currently in its infancy, so many changes are coming in the pipeline:
   

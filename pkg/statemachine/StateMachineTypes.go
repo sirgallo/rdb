@@ -36,7 +36,8 @@ type StateMachine struct {
 
 const NAME = "StateMachine"
 const SubDirectory = "raft/statemachine"
-const FileName = "statemachine.db"
+const FileNamePrefix = "statemachine"
+const DbFileName = FileNamePrefix + ".db"
 
 const (
 	FIND Action = "find"

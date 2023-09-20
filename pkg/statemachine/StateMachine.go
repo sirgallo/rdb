@@ -26,7 +26,7 @@ func NewStateMachine() (*StateMachine, error) {
 	homedir, homeErr := os.UserHomeDir()
 	if homeErr != nil { return nil, homeErr }
 
-	dbPath := filepath.Join(homedir, SubDirectory, FileName)
+	dbPath := filepath.Join(homedir, SubDirectory, DbFileName)
 	
 	db, openErr := bolt.Open(dbPath, 0600, nil)
 	if openErr != nil { return nil, openErr }

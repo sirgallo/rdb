@@ -1,7 +1,6 @@
 package statemachine
 
 import bolt "go.etcd.io/bbolt"
-import "github.com/google/uuid"
 import "strings"
 
 import "github.com/sirgallo/raft/pkg/utils"
@@ -22,13 +21,13 @@ import "github.com/sirgallo/raft/pkg/utils"
 		FIND
 			perform a lookup on a value. The key does not need to be known, and the value to look for is passed in the payload
 			--> the value is indexed in a separate collection, which points to the key that is associated with the value. Keys are dynamically 
-					generated on inserts and do not need be known to the user. The key can be seen more as a UUID
+					generated on inserts and do not need be known to the user. The key can be seen more as a unique identifier
 
 		INSERT
 			perform an insert for a value in a collection
-			--> on inserts, first a UUID is generated as the key for the value in the collection. Then, values are inserted into appropriate
+			--> on inserts, first a hash is generated as the key for the value in the collection. Then, values are inserted into appropriate
 				indexes. Since BoltDb utilizes a B+ tree as its primary data structure, key-value pairs are sorts by default. We can utilize this to
-				create indexes for our collections, where values become the primary key and the value becomes the uuid of the object in the collection,
+				create indexes for our collections, where values become the primary key and the value becomes the id of the object in the collection,
 				so essentially we can point directly to the location in the collection from a given index
 		
 		DELETE
@@ -131,11 +130,6 @@ func (sm *StateMachine) listCollections(bucket *bolt.Bucket, payload *StateMachi
 	}, nil
 }
 
-func (sm *StateMachine) generateKey() []byte {
-	uuid := uuid.New()
-	return []byte(uuid.String())
-}
-
 func (sm *StateMachine) insertIntoCollection(bucket *bolt.Bucket, payload *StateMachineOpPayload) (*StateMachineResponse, error) {
 	collectionName := []byte(payload.Collection)
 	collection := bucket.Bucket(collectionName)
@@ -145,7 +139,10 @@ func (sm *StateMachine) insertIntoCollection(bucket *bolt.Bucket, payload *State
 
 	if searchIndexResp.Value != utils.GetZero[string]() { return searchIndexResp, nil }
 
-	generatedKey := sm.generateKey()
+	hash, hashErr := utils.GenerateRandomSHA256Hash()
+	if hashErr != nil { return nil, hashErr }
+
+	generatedKey := []byte(hash)
 	value := []byte(payload.Value)
 
 	putErr := collection.Put(generatedKey, value)

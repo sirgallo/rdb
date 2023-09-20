@@ -29,7 +29,6 @@ First, install the `protoc` command. This is used to compile the `.proto` files 
 These two plugins create go specific code for the proto buffer files.
 
 To install (mac specific), run:
-
 ```bash
 brew install protobuf
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
@@ -39,13 +38,11 @@ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 The installation on Windows or Linux distros may differ.
 
 Once the plugins are installed, ensure that they are in your path. This can be done by editting your `.zshrc` file, or appropriate terminal (`bash`, etc.). To do so, run the following (I use `vscode` to edit, so the code command is specific to `vscode`).
-
 ```bash
 code ~/.zshrc
 ```
 
 In the file, add:
-
 ```bash
 export GOPATH=$(go env GOPATH)
 export GOBIN=$GOPATH/bin
@@ -54,13 +51,11 @@ export PATH=$PATH:/$GOBIN
 ```
 
 Once added, save, and source the `.zshrc` file so that the terminal picks up the changes:
-
 ```bash
 source ~/.zshrc
 ```
 
 To generate the language specific code for the protobuffers, run the following:
-
 ```bash
 protoc --go_out=. --go-grpc_out=. ./proto/replogrpc.proto 
 ```

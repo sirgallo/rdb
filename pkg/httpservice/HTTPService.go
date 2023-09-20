@@ -62,7 +62,7 @@ func (httpService *HTTPService) StartHTTPService() {
 
 			if ok {
 				*clientChannel <- response
-			} else { httpService.Log.Warn("no channel for resp associated with req uuid:", response.RequestID) }
+			} else { httpService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
 		}
 	}()
 }

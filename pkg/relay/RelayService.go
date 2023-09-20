@@ -99,7 +99,7 @@ func (rService *RelayService) RelayListener() {
 
 			if ok {
 				*clientChannel <- response
-			} else { rService.Log.Warn("no channel for resp associated with req uuid:", response.RequestID) }
+			} else { rService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
 		}
 	}()
 }
