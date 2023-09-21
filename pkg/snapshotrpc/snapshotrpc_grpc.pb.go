@@ -19,14 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	SnapshotService_SnapshotRPC_FullMethodName = "/snapshotrpc.SnapshotService/SnapshotRPC"
+	SnapshotService_StreamSnapshotRPC_FullMethodName = "/snapshotrpc.SnapshotService/StreamSnapshotRPC"
 )
 
 // SnapshotServiceClient is the client API for SnapshotService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SnapshotServiceClient interface {
-	SnapshotRPC(ctx context.Context, in *Snapshot, opts ...grpc.CallOption) (*SnapshotResponse, error)
+	StreamSnapshotRPC(ctx context.Context, opts ...grpc.CallOption) (SnapshotService_StreamSnapshotRPCClient, error)
 }
 
 type snapshotServiceClient struct {
@@ -37,20 +37,45 @@ func NewSnapshotServiceClient(cc grpc.ClientConnInterface) SnapshotServiceClient
 	return &snapshotServiceClient{cc}
 }
 
-func (c *snapshotServiceClient) SnapshotRPC(ctx context.Context, in *Snapshot, opts ...grpc.CallOption) (*SnapshotResponse, error) {
-	out := new(SnapshotResponse)
-	err := c.cc.Invoke(ctx, SnapshotService_SnapshotRPC_FullMethodName, in, out, opts...)
+func (c *snapshotServiceClient) StreamSnapshotRPC(ctx context.Context, opts ...grpc.CallOption) (SnapshotService_StreamSnapshotRPCClient, error) {
+	stream, err := c.cc.NewStream(ctx, &SnapshotService_ServiceDesc.Streams[0], SnapshotService_StreamSnapshotRPC_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &snapshotServiceStreamSnapshotRPCClient{stream}
+	return x, nil
+}
+
+type SnapshotService_StreamSnapshotRPCClient interface {
+	Send(*SnapshotChunk) error
+	CloseAndRecv() (*SnapshotStreamResponse, error)
+	grpc.ClientStream
+}
+
+type snapshotServiceStreamSnapshotRPCClient struct {
+	grpc.ClientStream
+}
+
+func (x *snapshotServiceStreamSnapshotRPCClient) Send(m *SnapshotChunk) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *snapshotServiceStreamSnapshotRPCClient) CloseAndRecv() (*SnapshotStreamResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(SnapshotStreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // SnapshotServiceServer is the server API for SnapshotService service.
 // All implementations must embed UnimplementedSnapshotServiceServer
 // for forward compatibility
 type SnapshotServiceServer interface {
-	SnapshotRPC(context.Context, *Snapshot) (*SnapshotResponse, error)
+	StreamSnapshotRPC(SnapshotService_StreamSnapshotRPCServer) error
 	mustEmbedUnimplementedSnapshotServiceServer()
 }
 
@@ -58,8 +83,8 @@ type SnapshotServiceServer interface {
 type UnimplementedSnapshotServiceServer struct {
 }
 
-func (UnimplementedSnapshotServiceServer) SnapshotRPC(context.Context, *Snapshot) (*SnapshotResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SnapshotRPC not implemented")
+func (UnimplementedSnapshotServiceServer) StreamSnapshotRPC(SnapshotService_StreamSnapshotRPCServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamSnapshotRPC not implemented")
 }
 func (UnimplementedSnapshotServiceServer) mustEmbedUnimplementedSnapshotServiceServer() {}
 
@@ -74,22 +99,30 @@ func RegisterSnapshotServiceServer(s grpc.ServiceRegistrar, srv SnapshotServiceS
 	s.RegisterService(&SnapshotService_ServiceDesc, srv)
 }
 
-func _SnapshotService_SnapshotRPC_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Snapshot)
-	if err := dec(in); err != nil {
+func _SnapshotService_StreamSnapshotRPC_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SnapshotServiceServer).StreamSnapshotRPC(&snapshotServiceStreamSnapshotRPCServer{stream})
+}
+
+type SnapshotService_StreamSnapshotRPCServer interface {
+	SendAndClose(*SnapshotStreamResponse) error
+	Recv() (*SnapshotChunk, error)
+	grpc.ServerStream
+}
+
+type snapshotServiceStreamSnapshotRPCServer struct {
+	grpc.ServerStream
+}
+
+func (x *snapshotServiceStreamSnapshotRPCServer) SendAndClose(m *SnapshotStreamResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *snapshotServiceStreamSnapshotRPCServer) Recv() (*SnapshotChunk, error) {
+	m := new(SnapshotChunk)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(SnapshotServiceServer).SnapshotRPC(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SnapshotService_SnapshotRPC_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SnapshotServiceServer).SnapshotRPC(ctx, req.(*Snapshot))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // SnapshotService_ServiceDesc is the grpc.ServiceDesc for SnapshotService service.
@@ -98,12 +131,13 @@ func _SnapshotService_SnapshotRPC_Handler(srv interface{}, ctx context.Context, 
 var SnapshotService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "snapshotrpc.SnapshotService",
 	HandlerType: (*SnapshotServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "SnapshotRPC",
-			Handler:    _SnapshotService_SnapshotRPC_Handler,
+			StreamName:    "StreamSnapshotRPC",
+			Handler:       _SnapshotService_StreamSnapshotRPC_Handler,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/snapshotrpc.proto",
 }

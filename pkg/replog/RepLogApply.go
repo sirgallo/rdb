@@ -46,7 +46,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		logsToBeApplied = append(logsToBeApplied, entries...) 
 	}
 
-	lastLogApplied := logsToBeApplied[len(logsToBeApplied) - 1]
+	lastLogToBeApplied := logsToBeApplied[len(logsToBeApplied) - 1]
 	
 	transform := func(logEntry *log.LogEntry) *statemachine.StateMachineOperation { 
 		command := logEntry.Command 
@@ -64,7 +64,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		}
 	} 
 	
-	rlService.CurrentSystem.LastApplied = lastLogApplied.Index
+	rlService.CurrentSystem.LastApplied = lastLogToBeApplied.Index
 
 	bucketSizeInBytes, getSizeErr := rlService.CurrentSystem.WAL.GetBucketSizeInBytes()
 	if getSizeErr != nil { 
@@ -77,7 +77,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		if statsArr == nil || getStatsErr != nil { return false }
 
 		latestObj := statsArr[len(statsArr) - 1]
-		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / 1000 // let's keep this small for now
+		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / 500 // let's keep this small for now
 
 		lastAppliedAtThreshold := bucketSizeInBytes >= thresholdInBytes
 		return lastAppliedAtThreshold && rlService.CurrentSystem.State == system.Leader

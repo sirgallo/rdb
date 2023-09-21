@@ -8,15 +8,16 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== Forward Response Client
 
 
 /*
-	Relay Client RPC:
-		used by followers to relay commands to the leader for processing
-		2.) encode the command to string
-		3.) attempt relay using exponential backoff
-		4.) if entry is not processed and a response is not returned for the client, return error
-		5.) otherwise, forward the response to the client associated with the request id and return success
+	Forward Resp Client RPC:
+		used by leader to relay responses back to the follower that relayed the request
+		1.) encode the response to string
+		2.) attempt forward using exponential backoff
+		3.) if response is not processed, return error
+		4.) otherwise, success
 */
 
 func (frService *ForwardRespService) ForwardRespClientRPC(resp statemachine.StateMachineResponse) (*forwardresprpc.ForwardRespResponse, error){

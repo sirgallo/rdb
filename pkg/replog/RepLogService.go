@@ -105,7 +105,7 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 		for {
 			select {
 				case <- rlService.PauseReplogSignal:
-					rlService.Log.Info("pausing replicated log")
+					rlService.Log.Info("pausing replicated log for snapshot...")
 					<- unpauseReplogSignal
 					rlService.Log.Info("unpausing replicated log")
 				case newCmd :=<- rlService.AppendLogSignal:

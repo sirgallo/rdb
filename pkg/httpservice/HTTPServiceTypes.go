@@ -33,4 +33,4 @@ const NAME = "HTTP Service"
 const CommandRoute = "/command"
 const RequestChannelSize = 1000000
 const ResponseChannelSize = 1000000
-const HTTPTimeout = 500 * time.Millisecond
+const HTTPTimeout = 2 * time.Second

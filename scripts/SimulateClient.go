@@ -41,7 +41,7 @@ func main() {
 
 	var clientWG sync.WaitGroup
 
-	for range make([]int, 40) {
+	for range make([]int, 100) {
 		clientWG.Add(1)
 
 		go func() {
@@ -59,7 +59,6 @@ func main() {
 				var reqWG sync.WaitGroup
 
 				reqWG.Add(1)
-				
 				go func() {
 					defer reqWG.Done()
 
@@ -79,7 +78,7 @@ func main() {
 					
 					requestBuffer := bytes.NewBuffer(requestJSON)
 					r, respErr := client.Post(url, CONTENT_TYPE, requestBuffer)
-					if respErr != nil { Log.Fatal(respErr.Error()) }
+					if respErr != nil && respErr != io.EOF { Log.Fatal(respErr.Error()) }
 			
 					defer r.Body.Close()
 					
@@ -104,6 +103,4 @@ func main() {
 	}
 
 	clientWG.Wait()
-
-	select{}
 }

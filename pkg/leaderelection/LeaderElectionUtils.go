@@ -80,3 +80,10 @@ func (leService *LeaderElectionService) resetTimer() {
 
 	leService.ElectionTimer.Reset(leService.Timeout)
 }
+
+func (leService *LeaderElectionService) attemptResetTimeoutSignal() {
+	select {
+		case leService.ResetTimeoutSignal <- true:
+		default:
+	}
+}

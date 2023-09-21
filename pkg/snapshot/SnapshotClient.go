@@ -2,17 +2,18 @@ package snapshot
 
 import "context"
 import "errors"
+import "io"
 import "os"
 import "sync/atomic"
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/snapshotrpc"
 import "github.com/sirgallo/raft/pkg/system"
-import "github.com/sirgallo/raft/pkg/utils"
+// import "github.com/sirgallo/raft/pkg/utils"
 import "github.com/sirgallo/raft/pkg/wal"
 
 
-//=========================================== RepLog Service
+//=========================================== Snapshot Client
 
 
 /*
@@ -39,15 +40,7 @@ func (snpService *SnapshotService) Snapshot() error {
 	snapshotFile, snapshotErr := snpService.CurrentSystem.StateMachine.SnapshotStateMachine()
 	if snapshotErr != nil { return snapshotErr }
 	
-	snapshotContent, readErr := os.ReadFile(snapshotFile)
-	if readErr != nil { return readErr }
-
-	snaprpc := &snapshotrpc.Snapshot{
-		LastIncludedIndex: lastAppliedLog.Index,
-		LastIncludedTerm: lastAppliedLog.Term,
-		SnapshotFilePath: snapshotFile,
-		Snapshot: snapshotContent,
-	}
+	snpService.Log.Info("snapshot created with filepath:", snapshotFile)
 
 	snapshotEntry := &wal.SnapshotEntry{
 		LastIncludedIndex: lastAppliedLog.Index,
@@ -58,15 +51,23 @@ func (snpService *SnapshotService) Snapshot() error {
 	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snapshotEntry)
 	if setErr != nil { return setErr }
 
-	ok, rpcErr := snpService.BroadcastSnapshotRPC(snaprpc)
-	if rpcErr != nil { return rpcErr }
-	if ! ok { return errors.New("snapshot not received and processed by min followers") }
+	snpService.SnapshotCompleteSignal <- true
 
 	delErr := snpService.CurrentSystem.WAL.DeleteLogs(lastAppliedLog.Index - 1)
 	if delErr != nil { 
 		snpService.Log.Error("error deleting logs")
 		return delErr 
 	}
+
+	initSnapShotRPC := &snapshotrpc.SnapshotChunk{
+		LastIncludedIndex: lastAppliedLog.Index,
+		LastIncludedTerm: lastAppliedLog.Term,
+		SnapshotFilePath: snapshotFile,
+	}
+
+	ok, rpcErr := snpService.BroadcastSnapshotRPC(initSnapShotRPC)
+	if rpcErr != nil { return rpcErr }
+	if ! ok { return errors.New("snapshot not received and processed by min followers") }
 
 	return nil
 }
@@ -95,14 +96,10 @@ func (snpService *SnapshotService) UpdateIndividualSystem(host string) error {
 		return getErr 
 	}
 
-	snapshotContent, readErr := os.ReadFile(snapshot.SnapshotFilePath)
-	if readErr != nil { return readErr }
-
-	snaprpc := &snapshotrpc.Snapshot{
+	snaprpc := &snapshotrpc.SnapshotChunk{
 		LastIncludedIndex: snapshot.LastIncludedIndex,
 		LastIncludedTerm: snapshot.LastIncludedTerm,
 		SnapshotFilePath: snapshot.SnapshotFilePath,
-		Snapshot: snapshotContent,
 	}
 
 	_, rpcErr := snpService.ClientSnapshotRPC(sys, snaprpc)
@@ -130,7 +127,7 @@ func (snpService *SnapshotService) UpdateIndividualSystem(host string) error {
 			4.) if total successful responses are greater than minimum, return success, otherwise failed
 */
 
-func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.Snapshot) (bool, error) {
+func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.SnapshotChunk) (bool, error) {
 	aliveSystems, minResps := snpService.GetAliveSystemsAndMinSuccessResps()
 	successfulResps := int64(0)
 
@@ -163,15 +160,17 @@ func (snpService *SnapshotService) BroadcastSnapshotRPC(snapshot *snapshotrpc.Sn
 }
 
 /*
-	Client Append Entry RPC:
+	Client Snapshot RPC:
 		helper method for making individual rpc calls
 
-		perform exponential backoff
-		--> success: return successful response
-		--> error: remove system from system map and close all open connections
+		a grpc stream is used here
+			--> open the file and read the snapshot file in chunks, passing the chunks into the snapshot stream channel
+			--> as new chunks enter the channel, send them to the target follower
+			--> close the snapshot stream when the file has been read, finish passing the rest of the chunks, 
+				and return the response from closing the stream
 */
 
-func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, snapshot *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
+func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, initSnapshotShotReq *snapshotrpc.SnapshotChunk) (*snapshotrpc.SnapshotStreamResponse, error) {
 	conn, connErr := snpService.ConnectionPool.GetConnection(sys.Host, snpService.Port)
 	if connErr != nil {
 		snpService.Log.Error("Failed to connect to", sys.Host + snpService.Port, ":", connErr.Error())
@@ -179,87 +178,56 @@ func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, snapsho
 	}
 
 	client := snapshotrpc.NewSnapshotServiceClient(conn)
+	stream, openStreamerr := client.StreamSnapshotRPC(context.Background())
+	if openStreamerr != nil { return nil, openStreamerr }
+	
+	snapshotStreamChannel := make(chan []byte, 100000)
 
-	snapshotRPC := func() (*snapshotrpc.SnapshotResponse, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
-		defer cancel()
+	go func() {
+		snpService.ReadSnapshotContentStream(initSnapshotShotReq.SnapshotFilePath, snapshotStreamChannel)
+		snpService.Log.Debug("read stream done?")
+		close(snapshotStreamChannel)
+	}()
 
-		res, err := client.SnapshotRPC(ctx, snapshot)
-		if err != nil { return utils.GetZero[*snapshotrpc.SnapshotResponse](), err }
-		return res, nil
+	sendSnapshotChunk := func(chunk []byte) error {
+		snapshotWithChunk := &snapshotrpc.SnapshotChunk{
+			LastIncludedIndex: initSnapshotShotReq.LastIncludedIndex,
+			LastIncludedTerm: initSnapshotShotReq.LastIncludedTerm,
+			SnapshotFilePath: initSnapshotShotReq.SnapshotFilePath,
+			SnapshotChunk: chunk,
+		}
+
+		streamErr := stream.Send(snapshotWithChunk)
+		if streamErr != nil { return streamErr }
+
+		return nil
+	}
+	
+	for chunk := range snapshotStreamChannel {
+		streamErr := sendSnapshotChunk(chunk)
+		if streamErr != nil { return nil, streamErr }
 	}
 
-	maxRetries := 5
-	expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 1 }
-	expBackoff := utils.NewExponentialBackoffStrat[*snapshotrpc.SnapshotResponse](expOpts)
+	res, resErr := stream.CloseAndRecv()
+	if resErr != nil { return nil, resErr }
 
-	res, err := expBackoff.PerformBackoff(snapshotRPC)
-	if err != nil {
-		snpService.Log.Warn("system", sys.Host, "unreachable, setting status to dead")
-
-		sys.SetStatus(system.Dead)
-		snpService.ConnectionPool.CloseConnections(sys.Host)
-
-		return nil, err
-	}
-
+	snpService.Log.Debug("result from stream received, returning success")
 	return res, nil
 }
 
-/*
-	SnapshotRPC
-		grpc server implementation
+func (snpService *SnapshotService) ReadSnapshotContentStream(snapshotFilePath string, snapshotStreamChannel chan []byte) error {
+	snapshotFile, openErr := os.Open(snapshotFilePath)
+	if openErr != nil { return openErr }
 
-		when snapshot is sent to the snapshotrpc server
-			1.) open a new file with the filepath included in the snapshot entry and write the compressed stream in the snapshot
-				to the file
-			2.) set the snapshot entry in the snapshot index in the replog bolt db for lookups
-			3.) if both complete, get the last included log in the replicated log and delete all logs up to it
-			4.) return response to leader
-*/
+	defer snapshotFile.Close()
 
-func (snpService *SnapshotService) SnapshotRPC(ctx context.Context, req *snapshotrpc.Snapshot) (*snapshotrpc.SnapshotResponse, error) {
-	writeErr := os.WriteFile(req.SnapshotFilePath, req.Snapshot, os.ModePerm)
-  if writeErr != nil { 
-		return &snapshotrpc.SnapshotResponse{
-			Success: false,
-		}, writeErr 
+	for {
+		buffer := make([]byte, ChunkSize)
+
+		_, readErr := snapshotFile.Read(buffer)
+		if readErr == io.EOF { return nil }
+		if readErr != nil { return readErr }
+
+		snapshotStreamChannel <- buffer
 	}
-
-	snapshotEntry := &wal.SnapshotEntry{
-		LastIncludedIndex: req.LastIncludedIndex,
-		LastIncludedTerm: req.LastIncludedTerm,
-		SnapshotFilePath: req.SnapshotFilePath,
-	}
-
-	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snapshotEntry)
-	
-	if setErr != nil { 
-		snpService.Log.Error("set err:", setErr.Error())
-		return &snapshotrpc.SnapshotResponse{
-			Success: false,
-		}, setErr
-	}
-
-	lastIncluded, readErr := snpService.CurrentSystem.WAL.Read(req.LastIncludedIndex)
-	if readErr != nil { 
-		snpService.Log.Error("read err:", readErr.Error())
-		return &snapshotrpc.SnapshotResponse{
-			Success: false,
-		}, setErr
-	}
-
-	delErr := snpService.CurrentSystem.WAL.DeleteLogs(lastIncluded.Index - 1)
-	if delErr != nil {
-		snpService.Log.Error("delete err:", delErr.Error())
-		return &snapshotrpc.SnapshotResponse{
-			Success: false,
-		}, delErr
-	}
-
-	snpService.Log.Info("snapshot from leader processed, returning successful response")
-	
-	return &snapshotrpc.SnapshotResponse{
-		Success: true,
-	}, nil
 }

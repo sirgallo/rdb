@@ -57,6 +57,8 @@ func (snpService *SnapshotService) StartSnapshotService(listener *net.Listener) 
 				--> if current leader, snapshot the state machine and then signal complete 
 			2.) update snapshot for node
 				--> if leader, send the latest snapshot on the system to the target follower
+			3.) process incoming snapshot
+				--> when a snapshot is received from a leader, process it in a separate go routine
 */
 
 func (snpService *SnapshotService) StartSnapshotListener() {
@@ -64,8 +66,11 @@ func (snpService *SnapshotService) StartSnapshotListener() {
 		for {
 			<- snpService.SnapshotStartSignal
 			if snpService.CurrentSystem.State == system.Leader { 
-				snpService.Snapshot() 
-				snpService.SnapshotCompleteSignal <- true
+				snapshotErr := snpService.Snapshot() 
+				if snapshotErr != nil { 
+					snpService.Log.Error("error snapshotting state and broadcasting to followers:", snapshotErr.Error()) 
+					snpService.SnapshotCompleteSignal <- true
+				}
 			}
 		}
 	}()
@@ -74,8 +79,21 @@ func (snpService *SnapshotService) StartSnapshotListener() {
 		for {
 			host :=<- snpService.UpdateSnapshotForSystemSignal
 			if snpService.CurrentSystem.State == system.Leader {
-				go snpService.UpdateIndividualSystem(host)
+				go func() { 
+					updateErr := snpService.UpdateIndividualSystem(host)
+					if updateErr != nil { snpService.Log.Error("error updating individual system:", updateErr) }
+				}()
 			}
 		}
 	}()
+
+	/*
+	go func() {
+		for {
+			req :=<- snpService.ProcessIncomingSnapshotSignal
+			processErr := snpService.ProcessIncomingSnapshotRPC(req)
+			if processErr != nil { snpService.Log.Error("error processing incoming snapshot", processErr.Error()) }
+		}
+	}()
+	*/
 }

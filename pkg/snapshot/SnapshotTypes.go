@@ -28,6 +28,7 @@ type SnapshotService struct {
 	SnapshotStartSignal chan bool
 	SnapshotCompleteSignal chan bool
 	UpdateSnapshotForSystemSignal chan string
+	ProcessIncomingSnapshotSignal chan *snapshotrpc.SnapshotChunk
 
 	Log clog.CustomLog
 }
@@ -35,3 +36,5 @@ type SnapshotService struct {
 const NAME = "Snapshot"
 const RPCTimeout = 200 * time.Millisecond
 const SnapshotTriggerAppliedIndex = 10000
+
+const ChunkSize = 1000000	// we will stream 1MB chunks

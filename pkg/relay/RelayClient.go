@@ -9,15 +9,16 @@ import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
+//=========================================== Relay Client
 
 
 /*
 	Relay Client RPC:
 		used by followers to relay commands to the leader for processing
-		2.) encode the command to string
-		3.) attempt relay using exponential backoff
-		4.) if entry is not processed and a response is not returned for the client, return error
-		5.) otherwise, forward the response to the client associated with the request id and return success
+		1.) encode the command to string
+		2.) attempt relay using exponential backoff
+		3.) if entry is not processed by leader or another follower that will forward again, return error
+		4.) otherwise, return success
 */
 
 func (rService *RelayService) RelayClientRPC(cmd statemachine.StateMachineOperation) (*relayrpc.RelayResponse, error){

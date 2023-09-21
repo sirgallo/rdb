@@ -249,6 +249,7 @@ func (wal *WAL) GetEarliest() (*log.LogEntry, error) {
 		create a read-write transaction for log compaction in the bucket
 			1.) for all logs up tothe last index, delete the key-value pair
 			2.) for each deleted, update the total keys and the total space removed from the log
+			3.) get latest log (last applied), and remove all indexes up to it
 */
 
 func (wal *WAL) DeleteLogs(endIndex int64) error {
@@ -272,6 +273,30 @@ func (wal *WAL) DeleteLogs(endIndex int64) error {
 
 			totalBytesRemoved += int64(len(key)) + int64(len(val))
 			totalKeysRemoved++
+		}
+
+		keyOfFirstLog := ConvertIntToBytes(endIndex + 1)
+		val := walBucket.Get(keyOfFirstLog)
+		
+		var latestEntry *log.LogEntry
+
+		if val != nil { 
+			entry, transformErr := log.TransformBytesToLogEntry(val)
+			if transformErr != nil { return transformErr }
+	
+			latestEntry = entry
+		} else { latestEntry = nil }
+
+		indexBucketName := []byte(ReplogIndex)
+		indexBucket := bucket.Bucket(indexBucketName)
+
+		latestTermKey := ConvertIntToBytes(latestEntry.Term)
+
+		indexCursor := indexBucket.Cursor()
+
+		for key, _ := indexCursor.First(); key != nil && bytes.Compare(key, latestTermKey) < 0; key, _ = indexCursor.Next() {
+			delErr := indexBucket.Delete(key)
+			if delErr != nil { return delErr }
 		}
 
 		updateErr := wal.UpdateReplogStats(bucket, totalBytesRemoved, totalKeysRemoved, SUB)

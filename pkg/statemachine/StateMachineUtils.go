@@ -45,7 +45,7 @@ func (sm *StateMachine) SnapshotStateMachine() (string, error) {
 		return nil
 	}
 
-	snapshotErr := sm.DB.Update(transaction)
+	snapshotErr := sm.DB.View(transaction)
 	if snapshotErr != nil { return utils.GetZero[string](), snapshotErr }
 
 	return snapshotPath, nil

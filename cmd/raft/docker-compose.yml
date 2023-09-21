@@ -10,9 +10,14 @@ services:
     volumes:
       - ../../certs:/certs
     ports: 
-      - '443:443'
+      - '127.0.0.1:443:443'
     networks:
       raft_api_network:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: '512M'
     depends_on:
       - raftsrv1
       - raftsrv2
