@@ -1,7 +1,6 @@
 package replog
 
 import "github.com/sirgallo/raft/pkg/log"
-import "github.com/sirgallo/raft/pkg/stats"
 import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
@@ -84,13 +83,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 	}()
 
 	if triggerSnapshot {
-		go func () { rlService.SignalStartSnapshot <- true }()
-
-		statObj, calcErr := stats.CalculateCurrentStats()
-		if calcErr != nil { return calcErr }
-
-		setErr := rlService.CurrentSystem.WAL.SetStat(*statObj)
-		if setErr != nil { return setErr }
+		rlService.SignalStartSnapshot <- true
 	}
 
 	return nil

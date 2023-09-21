@@ -9,7 +9,7 @@ import "sync"
 
 import "github.com/sirgallo/raft/pkg/snapshotrpc"
 import "github.com/sirgallo/raft/pkg/system"
-// import "github.com/sirgallo/raft/pkg/utils"
+import "github.com/sirgallo/raft/pkg/stats"
 import "github.com/sirgallo/raft/pkg/wal"
 
 
@@ -68,6 +68,12 @@ func (snpService *SnapshotService) Snapshot() error {
 	ok, rpcErr := snpService.BroadcastSnapshotRPC(initSnapShotRPC)
 	if rpcErr != nil { return rpcErr }
 	if ! ok { return errors.New("snapshot not received and processed by min followers") }
+
+	statObj, calcErr := stats.CalculateCurrentStats()
+	if calcErr != nil { return calcErr }
+
+	setStatErr := snpService.CurrentSystem.WAL.SetStat(*statObj)
+	if setStatErr != nil { return setStatErr }
 
 	snpService.CurrentSystem.SetStatus(system.Ready)
 	
