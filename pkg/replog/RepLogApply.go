@@ -82,9 +82,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		return lastAppliedAtThreshold && rlService.CurrentSystem.State == system.Leader
 	}()
 
-	if triggerSnapshot {
-		rlService.SignalStartSnapshot <- true
-	}
+	if triggerSnapshot { rlService.SignalStartSnapshot <- true }
 
 	return nil
 }
