@@ -59,3 +59,4 @@ const HeartbeatInterval = 50 * time.Millisecond
 const RPCTimeout = 200 * time.Millisecond
 const AppendLogBuffSize = 1000000
 const ResponseBuffSize = 100000
+const FractionOfAvailableSizeToTake = 500
