@@ -21,9 +21,9 @@ type HTTPService struct {
 
 	CurrentSystem *system.System
 	
-	RequestChannel chan statemachine.StateMachineOperation
-	ResponseChannel chan statemachine.StateMachineResponse
-	ClientMappedResponseChannel map[string]*chan statemachine.StateMachineResponse
+	RequestChannel chan *statemachine.StateMachineOperation
+	ResponseChannel chan *statemachine.StateMachineResponse
+	ClientMappedResponseChannel map[string]chan *statemachine.StateMachineResponse
 
 	Log clog.CustomLog
 }

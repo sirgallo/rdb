@@ -1,5 +1,7 @@
 package system
 
+import "sync/atomic"
+
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/utils"
 
@@ -116,6 +118,12 @@ func (sys *System) UpdateNextIndex(newIndex int64) bool {
 	defer sys.SystemMutex.Unlock()
 
 	sys.NextIndex = newIndex
+
+	return true
+}
+
+func(sys *System) UpdateCommitIndex() bool {
+	atomic.AddInt64(&sys.CommitIndex, 1)
 
 	return true
 }

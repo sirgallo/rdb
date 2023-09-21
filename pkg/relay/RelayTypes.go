@@ -28,8 +28,8 @@ type RelayService struct {
 	CurrentSystem *system.System
 	Systems *sync.Map
 
-	RelayChannel chan statemachine.StateMachineOperation
-	RelayedAppendLogSignal chan statemachine.StateMachineOperation
+	RelayChannel chan *statemachine.StateMachineOperation
+	RelayedAppendLogSignal chan *statemachine.StateMachineOperation
 
 	Log clog.CustomLog
 }

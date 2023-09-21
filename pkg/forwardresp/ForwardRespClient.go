@@ -20,8 +20,8 @@ import "github.com/sirgallo/raft/pkg/utils"
 		4.) otherwise, success
 */
 
-func (frService *ForwardRespService) ForwardRespClientRPC(resp statemachine.StateMachineResponse) (*forwardresprpc.ForwardRespResponse, error){
-	strResp, encErr := utils.EncodeStructToString[statemachine.StateMachineResponse](resp)
+func (frService *ForwardRespService) ForwardRespClientRPC(resp *statemachine.StateMachineResponse) (*forwardresprpc.ForwardRespResponse, error){
+	strResp, encErr := utils.EncodeStructToString[*statemachine.StateMachineResponse](resp)
 	if encErr != nil { 
 		frService.Log.Error("error encoding log struct to string") 
 		return nil, encErr

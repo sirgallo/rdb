@@ -61,8 +61,8 @@ func (httpService *HTTPService) RegisterCommandRoute() {
 			requestData.RequestOrigin = httpService.CurrentSystem.Host
 
 			httpService.Mutex.Lock()
-			clientResponseChannel := make(chan statemachine.StateMachineResponse)
-			httpService.ClientMappedResponseChannel[requestData.RequestID] = &clientResponseChannel
+			clientResponseChannel := make(chan *statemachine.StateMachineResponse)
+			httpService.ClientMappedResponseChannel[requestData.RequestID] = clientResponseChannel
 			httpService.Mutex.Unlock()
 
 			ctx, cancel := context.WithTimeout(context.Background(), HTTPTimeout)
@@ -75,7 +75,7 @@ func (httpService *HTTPService) RegisterCommandRoute() {
 					http.Error(w, "request timed out", http.StatusGatewayTimeout)
 					return
 				default:
-					httpService.RequestChannel <- *requestData
+					httpService.RequestChannel <- requestData
 					responseData :=<- clientResponseChannel
 
 					delete(httpService.ClientMappedResponseChannel, requestData.RequestID)

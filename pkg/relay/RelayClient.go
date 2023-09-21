@@ -21,13 +21,13 @@ import "github.com/sirgallo/raft/pkg/utils"
 		4.) otherwise, return success
 */
 
-func (rService *RelayService) RelayClientRPC(cmd statemachine.StateMachineOperation) (*relayrpc.RelayResponse, error){
+func (rService *RelayService) RelayClientRPC(cmd *statemachine.StateMachineOperation) (*relayrpc.RelayResponse, error){
 	if rService.CurrentSystem.CurrentLeader == utils.GetZero[string]() { 
 		return nil, errors.New("current leader not set") 
 	}
 
 	leader := rService.CurrentSystem.CurrentLeader
-	strCmd, encErr := utils.EncodeStructToString[statemachine.StateMachineOperation](cmd)
+	strCmd, encErr := utils.EncodeStructToString[*statemachine.StateMachineOperation](cmd)
 	if encErr != nil { 
 		rService.Log.Error("error encoding log struct to string") 
 		return nil, encErr

@@ -28,8 +28,8 @@ type ForwardRespService struct {
 	CurrentSystem *system.System
 	Systems *sync.Map
 
-	LeaderRelayResponseChannel chan statemachine.StateMachineResponse
-	ForwardRespChannel chan statemachine.StateMachineResponse
+	LeaderRelayResponseChannel chan *statemachine.StateMachineResponse
+	ForwardRespChannel chan *statemachine.StateMachineResponse
 
 	Log clog.CustomLog
 }

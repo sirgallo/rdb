@@ -59,7 +59,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 
 	if rlService.CurrentSystem.State == system.Leader {
 		for _, resp := range bulkApplyResps {
-			rlService.StateMachineResponseChannel <- *resp
+			rlService.StateMachineResponseChannel <- resp
 		}
 	} 
 	
@@ -71,6 +71,8 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		return getSizeErr
 	}
 
+	rlService.TriggerSnapshotMutex.Lock()
+
 	triggerSnapshot := func() bool { 
 		statsArr, getStatsErr := rlService.CurrentSystem.WAL.GetStats()
 		if statsArr == nil || getStatsErr != nil { return false }
@@ -79,10 +81,16 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / FractionOfAvailableSizeToTake // let's keep this small for now
 
 		lastAppliedAtThreshold := bucketSizeInBytes >= thresholdInBytes
-		return lastAppliedAtThreshold && rlService.CurrentSystem.State == system.Leader
+		systemAbleToSnapshot := rlService.CurrentSystem.State == system.Leader && rlService.CurrentSystem.Status != system.Busy
+		return lastAppliedAtThreshold && systemAbleToSnapshot
 	}()
 
-	if triggerSnapshot { rlService.SignalStartSnapshot <- true }
+	if triggerSnapshot { 
+		rlService.CurrentSystem.SetStatus(system.Busy)
+		rlService.SignalStartSnapshot <- true 
+	}
+
+	rlService.TriggerSnapshotMutex.Unlock()
 
 	return nil
 }

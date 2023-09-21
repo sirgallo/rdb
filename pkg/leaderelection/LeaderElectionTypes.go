@@ -41,9 +41,9 @@ type LeaderElectionService struct {
 }
 
 type LEResponseChannels struct {
-	BroadcastClose *chan struct{}
-	VotesChan *chan int
-	HigherTermDiscovered *chan int64
+	BroadcastClose chan struct{}
+	VotesChan chan int
+	HigherTermDiscovered chan int64
 }
 
 

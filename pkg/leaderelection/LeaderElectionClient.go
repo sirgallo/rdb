@@ -29,6 +29,10 @@ import "github.com/sirgallo/raft/pkg/utils"
 func (leService *LeaderElectionService) Election() error {
 	leService.CurrentSystem.TransitionToCandidate()
 	leRespChans := leService.createLERespChannels()
+
+	defer close(leRespChans.VotesChan)
+	defer close(leRespChans.HigherTermDiscovered)
+
 	aliveSystems, minimumVotes := leService.GetAliveSystemsAndMinVotes()
 	votesGranted := int64(1)
 	electionErrChan := make(chan error, 1)
@@ -42,7 +46,7 @@ func (leService *LeaderElectionService) Election() error {
 
 		for {
 			select {
-				case <- *leRespChans.BroadcastClose:
+				case <- leRespChans.BroadcastClose:
 					if votesGranted >= int64(minimumVotes) {
 						leService.CurrentSystem.TransitionToLeader()
 						lastLogIndex, _, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
@@ -66,9 +70,9 @@ func (leService *LeaderElectionService) Election() error {
 					}
 
 					return 
-				case <- *leRespChans.VotesChan:
+				case <- leRespChans.VotesChan:
 					atomic.AddInt64(&votesGranted, 1)
-				case term :=<- *leRespChans.HigherTermDiscovered:
+				case term :=<- leRespChans.HigherTermDiscovered:
 					leService.Log.Warn("higher term discovered.")
 					leService.CurrentSystem.TransitionToFollower(system.StateTransitionOpts{ CurrentTerm: &term })
 					leService.attemptResetTimeoutSignal()
@@ -85,9 +89,6 @@ func (leService *LeaderElectionService) Election() error {
 	}()
 
 	electionWG.Wait()
-
-	close(*leRespChans.VotesChan)
-	close(*leRespChans.HigherTermDiscovered)
 
 	select {
 		case electionErr :=<- electionErrChan:
@@ -106,7 +107,7 @@ func (leService *LeaderElectionService) Election() error {
 */
 
 func (leService *LeaderElectionService) broadcastVotes(aliveSystems []*system.System, leRespChans LEResponseChannels) error {
-	defer close(*leRespChans.BroadcastClose)
+	defer close(leRespChans.BroadcastClose)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -168,9 +169,9 @@ func (leService *LeaderElectionService) broadcastVotes(aliveSystems []*system.Sy
 						return 
 					}
 
-					if res.VoteGranted { *leRespChans.VotesChan <- 1 }
+					if res.VoteGranted { leRespChans.VotesChan <- 1 }
 					if res.Term > leService.CurrentSystem.CurrentTerm {
-						*leRespChans.HigherTermDiscovered <- res.Term
+						leRespChans.HigherTermDiscovered <- res.Term
 						cancel()
 					}
 				
@@ -190,8 +191,8 @@ func (leService *LeaderElectionService) createLERespChannels() LEResponseChannel
 	higherTermDiscovered := make(chan int64)
 
 	return LEResponseChannels{
-		BroadcastClose: &broadcastClose,
-		VotesChan: &votesChan,
-		HigherTermDiscovered: &higherTermDiscovered,
+		BroadcastClose: broadcastClose,
+		VotesChan: votesChan,
+		HigherTermDiscovered: higherTermDiscovered,
 	}
 }

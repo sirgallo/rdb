@@ -24,14 +24,14 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		AppendLogSignal: make(chan statemachine.StateMachineOperation, AppendLogBuffSize),
+		AppendLogSignal: make(chan *statemachine.StateMachineOperation, AppendLogBuffSize),
 		LeaderAcknowledgedSignal: make(chan bool),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
 		SignalStartSnapshot: make(chan bool),
 		SignalCompleteSnapshot: make(chan bool),
 		SendSnapshotToSystemSignal: make(chan string),
-		StateMachineResponseChannel: make(chan statemachine.StateMachineResponse, ResponseBuffSize),
+		StateMachineResponseChannel: make(chan *statemachine.StateMachineResponse, ResponseBuffSize),
 		Log: *clog.NewCustomLog(NAME),
 	}
 

@@ -23,13 +23,14 @@ type ReplicatedLogService struct {
 	replogrpc.UnimplementedRepLogServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool
+	TriggerSnapshotMutex sync.Mutex
 
 	CurrentSystem *system.System
 	Systems *sync.Map
 	
 	HeartBeatTimer *time.Timer
 
-	AppendLogSignal chan statemachine.StateMachineOperation
+	AppendLogSignal chan *statemachine.StateMachineOperation
 	LeaderAcknowledgedSignal chan bool
 	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
@@ -37,7 +38,7 @@ type ReplicatedLogService struct {
 	SignalStartSnapshot chan bool
 	SignalCompleteSnapshot chan bool
 	SendSnapshotToSystemSignal chan string
-	StateMachineResponseChannel chan statemachine.StateMachineResponse
+	StateMachineResponseChannel chan *statemachine.StateMachineResponse
 
 	Log clog.CustomLog
 }
@@ -48,15 +49,15 @@ type ReplicatedLogRequest struct {
 }
 
 type RLResponseChannels struct {
-	BroadcastClose *chan struct{}
-	SuccessChan *chan int
-	HigherTermDiscovered *chan int64
+	BroadcastClose chan struct{}
+	SuccessChan chan int
+	HigherTermDiscovered chan int64
 }
 
 
 const NAME = "Replicated Log"
 const HeartbeatInterval = 50 * time.Millisecond
-const RPCTimeout = 200 * time.Millisecond
+const RPCTimeout = 50 * time.Millisecond
 const AppendLogBuffSize = 1000000
 const ResponseBuffSize = 100000
 const FractionOfAvailableSizeToTake = 500

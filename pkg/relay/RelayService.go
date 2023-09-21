@@ -23,8 +23,8 @@ func NewRelayService(opts *RelayOpts) *RelayService {
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		RelayChannel: make(chan statemachine.StateMachineOperation, RelayChannelBuffSize),
-		RelayedAppendLogSignal: make(chan statemachine.StateMachineOperation),
+		RelayChannel: make(chan *statemachine.StateMachineOperation, RelayChannelBuffSize),
+		RelayedAppendLogSignal: make(chan *statemachine.StateMachineOperation),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -66,7 +66,7 @@ func (rService *RelayService) StartRelayService(listener *net.Listener) {
 */
 
 func (rService *RelayService) RelayListener() {
-	failedBuffer := make(chan statemachine.StateMachineOperation, FailedBuffSize)
+	failedBuffer := make(chan *statemachine.StateMachineOperation, FailedBuffSize)
 	
 	go func() {
 		for cmd := range failedBuffer {

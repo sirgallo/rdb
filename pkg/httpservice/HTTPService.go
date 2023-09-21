@@ -23,9 +23,9 @@ func NewHTTPService(opts *HTTPServiceOpts) *HTTPService {
 		Mux: mux,
 		Port: utils.NormalizePort(opts.Port),
 		CurrentSystem: opts.CurrentSystem,
-		RequestChannel: make(chan statemachine.StateMachineOperation, RequestChannelSize),
-		ResponseChannel: make(chan statemachine.StateMachineResponse, ResponseChannelSize),
-		ClientMappedResponseChannel: make(map[string]*chan statemachine.StateMachineResponse),
+		RequestChannel: make(chan *statemachine.StateMachineOperation, RequestChannelSize),
+		ResponseChannel: make(chan *statemachine.StateMachineResponse, ResponseChannelSize),
+		ClientMappedResponseChannel: make(map[string]chan *statemachine.StateMachineResponse),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -60,7 +60,7 @@ func (httpService *HTTPService) StartHTTPService() {
 			httpService.Mutex.Unlock()
 
 			if ok {
-				*clientChannel <- response
+				clientChannel <- response
 			} else { httpService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
 		}
 	}()

@@ -34,8 +34,6 @@ import "github.com/sirgallo/raft/pkg/wal"
 */
 
 func (snpService *SnapshotService) Snapshot() error {
-	snpService.CurrentSystem.SetStatus(system.Busy)
-
 	lastAppliedLog, readErr := snpService.CurrentSystem.WAL.Read(snpService.CurrentSystem.LastApplied)
 	if readErr != nil { return readErr }
 

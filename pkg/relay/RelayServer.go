@@ -46,8 +46,8 @@ func (rService *RelayService) RelayRPC(ctx context.Context, req *relayrpc.RelayR
 	}
 
 	if rService.CurrentSystem.State == system.Follower { 
-		rService.RelayChannel <- *cmd 
-	} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- *cmd }
+		rService.RelayChannel <- cmd 
+	} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- cmd }
 
 	return &relayrpc.RelayResponse{ 
 		ProcessedRequest: true,

@@ -78,25 +78,25 @@ func main() {
 					
 					requestBuffer := bytes.NewBuffer(requestJSON)
 					r, respErr := client.Post(url, CONTENT_TYPE, requestBuffer)
-					if respErr == io.EOF { 
-						Log.Error("end of file", respErr.Error()) 
-					} else if respErr != nil { Log.Fatal(respErr.Error()) }
+					if respErr != nil { 
+						Log.Error(respErr.Error()) 
+					} else {				
+						defer r.Body.Close()
+						
+						if r.StatusCode != 200 {
+							responseBody, _ := io.ReadAll(r.Body)
+							Log.Warn("status not 200", string(responseBody))
 			
-					defer r.Body.Close()
-					
-					if r.StatusCode != 200 {
-						responseBody, _ := io.ReadAll(r.Body)
-						Log.Warn("status not 200", string(responseBody))
-		
-						return 
+							return 
+						}
+			
+						var response *statemachine.StateMachineResponse
+				
+						decodeErr := json.NewDecoder(r.Body).Decode(&response)
+						if decodeErr != nil { Log.Fatal("failed to decode response", decodeErr.Error()) }
+				
+						Log.Debug("response:", response)
 					}
-		
-					var response *statemachine.StateMachineResponse
-			
-					decodeErr := json.NewDecoder(r.Body).Decode(&response)
-					if decodeErr != nil { Log.Fatal("failed to decode response", decodeErr.Error()) }
-			
-					Log.Debug("response:", response)
 				}()
 
 				reqWG.Wait()

@@ -23,8 +23,8 @@ func NewForwardRespService(opts *ForwardRespOpts) *ForwardRespService {
 		ConnectionPool: opts.ConnectionPool,
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
-		LeaderRelayResponseChannel: make(chan statemachine.StateMachineResponse, RelayRespBuffSize),
-		ForwardRespChannel: make(chan statemachine.StateMachineResponse, ForwardRespChannel),
+		LeaderRelayResponseChannel: make(chan *statemachine.StateMachineResponse, RelayRespBuffSize),
+		ForwardRespChannel: make(chan *statemachine.StateMachineResponse, ForwardRespChannel),
 		Log: *clog.NewCustomLog(NAME),
 	}
 

@@ -30,7 +30,6 @@ func (raft *RaftService) UpdateRepLogOnStartup() (bool, error) {
 		return false, latestErr
 	} else if lastLog != nil {
 		raft.CurrentSystem.CommitIndex = lastLog.Index
-		raft.CurrentSystem.CurrentTerm = lastLog.Term
 
 		applyErr := raft.ReplicatedLog.ApplyLogs()
 		if applyErr != nil { return false, applyErr }

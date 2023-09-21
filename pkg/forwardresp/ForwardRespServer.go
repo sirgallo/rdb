@@ -44,7 +44,7 @@ func (frService *ForwardRespService) ForwardRespRPC(ctx context.Context, req *fo
 		return failedResp, decErr
 	}
 
-	frService.ForwardRespChannel <- *resp
+	frService.ForwardRespChannel <- resp
 		
 	return &forwardresprpc.ForwardRespResponse{ 
 		ProcessedRequest: true,
