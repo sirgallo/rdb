@@ -77,7 +77,6 @@ func (rlService *ReplicatedLogService) StartReplicatedLogService(listener *net.L
 
 func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
-	
 	timeoutChan := make(chan bool)
 	unpauseReplogSignal := make(chan bool, 1)
 
@@ -114,6 +113,14 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 		}
 	}()
 
+	/*
+	go func() {
+		for newCmd := range rlService.AppendLogSignal {
+			if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
+		}
+	}()
+	*/
+
 	go func() {
 		for {
 			select {
@@ -133,8 +140,7 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	}()
 
 	go func() {
-		for {
-			host :=<- rlService.SyncLogChannel
+		for host := range rlService.SyncLogChannel {
 			go rlService.SyncLogs(host)
 		}
 	}()

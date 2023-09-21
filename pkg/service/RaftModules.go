@@ -23,29 +23,25 @@ import "github.com/sirgallo/raft/pkg/system"
 
 func (raft *RaftService) StartModulePassThroughs() {
 	go func() {
-		for {
-			<- raft.ReplicatedLog.LeaderAcknowledgedSignal
+		for range raft.ReplicatedLog.LeaderAcknowledgedSignal {
 			raft.LeaderElection.ResetTimeoutSignal <- true
 		}
 	}()
 
 	go func() {
-		for {
-			<- raft.LeaderElection.HeartbeatOnElection
+		for range raft.LeaderElection.HeartbeatOnElection {
 			raft.ReplicatedLog.ForceHeartbeatSignal <- true
 		}
 	}()
 
 	go func() {
-		for {
-			cmd :=<- raft.Relay.RelayedAppendLogSignal
+		for cmd := range raft.Relay.RelayedAppendLogSignal {
 			raft.ReplicatedLog.AppendLogSignal <- cmd
 		}
 	}()
 
 	go func() {
-		for {
-			cmdEntry :=<- raft.HTTPService.RequestChannel
+		for cmdEntry := range raft.HTTPService.RequestChannel {
 			if raft.CurrentSystem.State == system.Leader {
 				raft.ReplicatedLog.AppendLogSignal <- cmdEntry
 			} else { raft.Relay.RelayChannel <- cmdEntry }
@@ -53,8 +49,7 @@ func (raft *RaftService) StartModulePassThroughs() {
 	}()
 
 	go func() {
-		for {
-			response :=<- raft.ReplicatedLog.StateMachineResponseChannel
+		for response := range raft.ReplicatedLog.StateMachineResponseChannel {
 			if raft.CurrentSystem.State == system.Leader {
 				if response.RequestOrigin == raft.CurrentSystem.Host {
 					raft.HTTPService.ResponseChannel <- response
@@ -64,8 +59,7 @@ func (raft *RaftService) StartModulePassThroughs() {
 	}()
 
 	go func() {
-		for {
-			response :=<- raft.ForwardResp.ForwardRespChannel
+		for response := range raft.ForwardResp.ForwardRespChannel {
 			if raft.CurrentSystem.State == system.Follower {
 				if response.RequestOrigin == raft.CurrentSystem.Host { 
 					raft.HTTPService.ResponseChannel <- response 
@@ -75,22 +69,19 @@ func (raft *RaftService) StartModulePassThroughs() {
 	}()
 
 	go func() {
-		for {
-			<- raft.ReplicatedLog.SignalStartSnapshot
+		for range raft.ReplicatedLog.SignalStartSnapshot {
 			raft.Snapshot.SnapshotStartSignal <- true
 		}
 	}()
 
 	go func() {
-		for {
-			<- raft.Snapshot.SnapshotCompleteSignal
+		for range raft.Snapshot.SnapshotCompleteSignal {
 			raft.ReplicatedLog.SignalCompleteSnapshot <- true
 		}
 	}()
 
 	go func() {
-		for {
-			host :=<- raft.ReplicatedLog.SendSnapshotToSystemSignal
+		for host := range raft.ReplicatedLog.SendSnapshotToSystemSignal {
 			raft.ReplicatedLog.SendSnapshotToSystemSignal <- host
 		}
 	}()

@@ -67,8 +67,7 @@ func (frService *ForwardRespService) StartForwardRespService(listener *net.Liste
 
 func (frService *ForwardRespService) ForwardListener() {
 	go func(){
-		for {
-			response :=<- frService.LeaderRelayResponseChannel
+		for response := range frService.LeaderRelayResponseChannel {
 			_, forwardErr := frService.ForwardRespClientRPC(response)
 			if forwardErr != nil { frService.Log.Error("unable to forward response back to origin:", forwardErr.Error()) }
 		}

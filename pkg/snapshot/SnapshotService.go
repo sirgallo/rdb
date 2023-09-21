@@ -63,8 +63,7 @@ func (snpService *SnapshotService) StartSnapshotService(listener *net.Listener) 
 
 func (snpService *SnapshotService) StartSnapshotListener() {
 	go func() {
-		for {
-			<- snpService.SnapshotStartSignal
+		for range snpService.SnapshotStartSignal {
 			if snpService.CurrentSystem.State == system.Leader { 
 				snapshotErr := snpService.Snapshot() 
 				if snapshotErr != nil { 
@@ -76,24 +75,13 @@ func (snpService *SnapshotService) StartSnapshotListener() {
 	}()
 
 	go func() {
-		for {
-			host :=<- snpService.UpdateSnapshotForSystemSignal
+		for host := range snpService.UpdateSnapshotForSystemSignal {
 			if snpService.CurrentSystem.State == system.Leader {
-				go func() { 
+				go func(host string) { 
 					updateErr := snpService.UpdateIndividualSystem(host)
 					if updateErr != nil { snpService.Log.Error("error updating individual system:", updateErr) }
-				}()
+				}(host)
 			}
 		}
 	}()
-
-	/*
-	go func() {
-		for {
-			req :=<- snpService.ProcessIncomingSnapshotSignal
-			processErr := snpService.ProcessIncomingSnapshotRPC(req)
-			if processErr != nil { snpService.Log.Error("error processing incoming snapshot", processErr.Error()) }
-		}
-	}()
-	*/
 }

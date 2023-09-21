@@ -54,8 +54,7 @@ func (httpService *HTTPService) StartHTTPService() {
 	}()
 
 	go func() {
-		for {
-			response :=<- httpService.ResponseChannel
+		for response := range httpService.ResponseChannel {
 			httpService.Mutex.Lock()
 			clientChannel, ok := httpService.ClientMappedResponseChannel[response.RequestID]
 			httpService.Mutex.Unlock()

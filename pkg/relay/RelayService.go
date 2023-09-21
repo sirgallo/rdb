@@ -69,15 +69,15 @@ func (rService *RelayService) RelayListener() {
 	failedBuffer := make(chan statemachine.StateMachineOperation, FailedBuffSize)
 	
 	go func() {
-		cmd :=<- failedBuffer
-		if rService.CurrentSystem.State == system.Follower {
-			rService.RelayChannel <- cmd
-		} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- cmd }
+		for cmd := range failedBuffer {
+			if rService.CurrentSystem.State == system.Follower {
+				rService.RelayChannel <- cmd
+			} else if rService.CurrentSystem.State == system.Leader { rService.RelayedAppendLogSignal <- cmd }
+		}
 	}()
 
 	go func() {
-		for {
-			cmd :=<- rService.RelayChannel
+		for cmd := range rService.RelayChannel {
 			if rService.CurrentSystem.State == system.Follower {
 				_, err := rService.RelayClientRPC(cmd)
 				if err != nil { rService.Log.Error("dropping relay request, appending to failed buffer for retry", err.Error()) }

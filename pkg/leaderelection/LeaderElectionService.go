@@ -77,8 +77,7 @@ func (leService *LeaderElectionService) StartElectionTimeout() {
 	}()
 
 	go func() {
-		for {
-			<- timeoutChannel
+		for range timeoutChannel {
 			if leService.CurrentSystem.State == system.Follower { leService.Election() }
 		}
 	}()
