@@ -1,6 +1,5 @@
 package statemachine
 
-import "compress/gzip"
 import "io"
 import "os"
 import "path/filepath"
@@ -35,11 +34,8 @@ func (sm *StateMachine) SnapshotStateMachine() (string, error) {
 	if fCreateErr != nil { return utils.GetZero[string](), fCreateErr }
 	defer snapshotFile.Close()
 
-	gzipWriter := gzip.NewWriter(snapshotFile)
-	defer gzipWriter.Close()
-
 	transaction := func(tx *bolt.Tx) error {
-		_, writeErr := tx.WriteTo(gzipWriter)
+		_, writeErr := tx.WriteTo(snapshotFile)
 		if writeErr != nil { return writeErr }
 
 		return nil
@@ -67,13 +63,9 @@ func (sm *StateMachine) ReplaySnapshot(snapshotPath string) error {
 
 	dbPath := filepath.Join(homedir, SubDirectory, DbFileName)
 
-	gzippedSnapshotFile, openErr := os.Open(snapshotPath)
+	snapshotFile, openErr := os.Open(snapshotPath)
 	if openErr != nil { return openErr }
-	defer gzippedSnapshotFile.Close()
-
-	gzipReader, gzipErr := gzip.NewReader(gzippedSnapshotFile)
-	if gzipErr != nil { return gzipErr }
-	defer gzipReader.Close()
+	defer snapshotFile.Close()
 
 	closeErr := sm.DB.Close()
 	if closeErr != nil { return closeErr }
@@ -85,7 +77,7 @@ func (sm *StateMachine) ReplaySnapshot(snapshotPath string) error {
 	if createFileErr != nil { return createFileErr }
 	defer databaseFile.Close()
 
-	_, copyErr := io.Copy(databaseFile, gzipReader)
+	_, copyErr := io.Copy(databaseFile, snapshotFile)
 	if copyErr != nil { return copyErr }
 
 	db, openErr := bolt.Open(dbPath, 0600, nil)
