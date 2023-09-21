@@ -63,7 +63,7 @@ func (snpService *SnapshotService) StartSnapshotService(listener *net.Listener) 
 func (snpService *SnapshotService) StartSnapshotListener() {
 	go func() {
 		for range snpService.SnapshotStartSignal {
-			if snpService.CurrentSystem.State == system.Leader { 
+			if snpService.CurrentSystem.State == system.Leader && snpService.CurrentSystem.Status != system.Busy { 
 				snapshotErr := snpService.Snapshot() 
 				if snapshotErr != nil { snpService.Log.Error("error snapshotting state and broadcasting to followers:", snapshotErr.Error()) }
 			}

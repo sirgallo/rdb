@@ -41,7 +41,7 @@ func (sm *StateMachine) SnapshotStateMachine() (string, error) {
 		return nil
 	}
 
-	snapshotErr := sm.DB.Update(transaction)
+	snapshotErr := sm.DB.View(transaction)
 	if snapshotErr != nil { return utils.GetZero[string](), snapshotErr }
 
 	return snapshotPath, nil
@@ -97,9 +97,7 @@ func (sm *StateMachine) generateFilename() (string, error) {
 	hash, hashErr := utils.GenerateRandomSHA256Hash()
 	if hashErr != nil { return utils.GetZero[string](), hashErr }
 
-	snapshotName := func() string {
-		return FileNamePrefix + "_" + hash + ".gz"
-	}()
+	snapshotName := func() string { return FileNamePrefix + "_" + hash }()
 
 	return snapshotName, nil
 }

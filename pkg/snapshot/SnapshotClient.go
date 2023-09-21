@@ -34,6 +34,8 @@ import "github.com/sirgallo/raft/pkg/wal"
 */
 
 func (snpService *SnapshotService) Snapshot() error {
+	snpService.CurrentSystem.SetStatus(system.Busy)
+
 	lastAppliedLog, readErr := snpService.CurrentSystem.WAL.Read(snpService.CurrentSystem.LastApplied)
 	if readErr != nil { return readErr }
 
@@ -67,6 +69,8 @@ func (snpService *SnapshotService) Snapshot() error {
 	if rpcErr != nil { return rpcErr }
 	if ! ok { return errors.New("snapshot not received and processed by min followers") }
 
+	snpService.CurrentSystem.SetStatus(system.Ready)
+	
 	return nil
 }
 
@@ -183,7 +187,6 @@ func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, initSna
 
 	go func() {
 		snpService.ReadSnapshotContentStream(initSnapshotShotReq.SnapshotFilePath, snapshotStreamChannel)
-		snpService.Log.Debug("read stream done?")
 		close(snapshotStreamChannel)
 	}()
 
@@ -209,7 +212,7 @@ func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, initSna
 	res, resErr := stream.CloseAndRecv()
 	if resErr != nil { return nil, resErr }
 
-	snpService.Log.Debug("result from stream received, returning success")
+	snpService.Log.Debug("result from stream received for:", sys.Host, ",returning success")
 	return res, nil
 }
 
