@@ -277,27 +277,23 @@ func (wal *WAL) DeleteLogs(endIndex int64) error {
 
 		keyOfFirstLog := ConvertIntToBytes(endIndex + 1)
 		val := walBucket.Get(keyOfFirstLog)
-		
-		var latestEntry *log.LogEntry
 
 		if val != nil { 
 			entry, transformErr := log.TransformBytesToLogEntry(val)
 			if transformErr != nil { return transformErr }
 	
-			latestEntry = entry
-		} else { latestEntry = nil }
+			indexBucketName := []byte(ReplogIndex)
+			indexBucket := bucket.Bucket(indexBucketName)
 
-		indexBucketName := []byte(ReplogIndex)
-		indexBucket := bucket.Bucket(indexBucketName)
+			latestTermKey := ConvertIntToBytes(entry.Term)
 
-		latestTermKey := ConvertIntToBytes(latestEntry.Term)
+			indexCursor := indexBucket.Cursor()
 
-		indexCursor := indexBucket.Cursor()
-
-		for key, _ := indexCursor.First(); key != nil && bytes.Compare(key, latestTermKey) < 0; key, _ = indexCursor.Next() {
-			delErr := indexBucket.Delete(key)
-			if delErr != nil { return delErr }
-		}
+			for key, _ := indexCursor.First(); key != nil && bytes.Compare(key, latestTermKey) < 0; key, _ = indexCursor.Next() {
+				delErr := indexBucket.Delete(key)
+				if delErr != nil { return delErr }
+			}
+		} 
 
 		updateErr := wal.UpdateReplogStats(bucket, totalBytesRemoved, totalKeysRemoved, SUB)
 		if updateErr != nil { return updateErr }

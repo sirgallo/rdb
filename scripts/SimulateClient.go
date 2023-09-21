@@ -78,7 +78,9 @@ func main() {
 					
 					requestBuffer := bytes.NewBuffer(requestJSON)
 					r, respErr := client.Post(url, CONTENT_TYPE, requestBuffer)
-					if respErr != nil && respErr != io.EOF { Log.Fatal(respErr.Error()) }
+					if respErr == io.EOF { 
+						Log.Error("end of file", respErr.Error()) 
+					} else if respErr != nil { Log.Fatal(respErr.Error()) }
 			
 					defer r.Body.Close()
 					

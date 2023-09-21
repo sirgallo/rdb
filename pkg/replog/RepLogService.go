@@ -30,7 +30,6 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		SyncLogChannel: make(chan string),
 		SignalStartSnapshot: make(chan bool),
 		SignalCompleteSnapshot: make(chan bool),
-		PauseReplogSignal: make(chan bool),
 		SendSnapshotToSystemSignal: make(chan string),
 		StateMachineResponseChannel: make(chan statemachine.StateMachineResponse, ResponseBuffSize),
 		Log: *clog.NewCustomLog(NAME),
@@ -78,7 +77,6 @@ func (rlService *ReplicatedLogService) StartReplicatedLogService(listener *net.L
 func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
 	timeoutChan := make(chan bool)
-	unpauseReplogSignal := make(chan bool, 1)
 
 	go func() {
 		for {
@@ -93,33 +91,10 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	}()
 
 	go func() {
-		for {
-			<- rlService.SignalCompleteSnapshot
-			rlService.Log.Info("snapshot process completed")
-			unpauseReplogSignal <- true
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-				case <- rlService.PauseReplogSignal:
-					rlService.Log.Info("pausing replicated log for snapshot...")
-					<- unpauseReplogSignal
-					rlService.Log.Info("unpausing replicated log")
-				case newCmd :=<- rlService.AppendLogSignal:
-					if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
-			}
-		}
-	}()
-
-	/*
-	go func() {
 		for newCmd := range rlService.AppendLogSignal {
 			if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
 		}
 	}()
-	*/
 
 	go func() {
 		for {

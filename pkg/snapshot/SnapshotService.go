@@ -23,7 +23,6 @@ func NewSnapshotService(opts *SnapshotServiceOpts) *SnapshotService {
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
 		SnapshotStartSignal: make(chan bool),
-		SnapshotCompleteSignal: make(chan bool),
 		UpdateSnapshotForSystemSignal: make(chan string),
 		Log: *clog.NewCustomLog(NAME),
 	}
@@ -66,10 +65,7 @@ func (snpService *SnapshotService) StartSnapshotListener() {
 		for range snpService.SnapshotStartSignal {
 			if snpService.CurrentSystem.State == system.Leader { 
 				snapshotErr := snpService.Snapshot() 
-				if snapshotErr != nil { 
-					snpService.Log.Error("error snapshotting state and broadcasting to followers:", snapshotErr.Error()) 
-					snpService.SnapshotCompleteSignal <- true
-				}
+				if snapshotErr != nil { snpService.Log.Error("error snapshotting state and broadcasting to followers:", snapshotErr.Error()) }
 			}
 		}
 	}()

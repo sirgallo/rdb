@@ -75,12 +75,6 @@ func (raft *RaftService) StartModulePassThroughs() {
 	}()
 
 	go func() {
-		for range raft.Snapshot.SnapshotCompleteSignal {
-			raft.ReplicatedLog.SignalCompleteSnapshot <- true
-		}
-	}()
-
-	go func() {
 		for host := range raft.ReplicatedLog.SendSnapshotToSystemSignal {
 			raft.ReplicatedLog.SendSnapshotToSystemSignal <- host
 		}

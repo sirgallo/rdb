@@ -26,7 +26,6 @@ type SnapshotService struct {
 	Systems *sync.Map
 
 	SnapshotStartSignal chan bool
-	SnapshotCompleteSignal chan bool
 	UpdateSnapshotForSystemSignal chan string
 	ProcessIncomingSnapshotSignal chan *snapshotrpc.SnapshotChunk
 

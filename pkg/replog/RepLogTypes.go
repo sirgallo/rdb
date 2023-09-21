@@ -36,7 +36,6 @@ type ReplicatedLogService struct {
 	SyncLogChannel chan string
 	SignalStartSnapshot chan bool
 	SignalCompleteSnapshot chan bool
-	PauseReplogSignal chan bool
 	SendSnapshotToSystemSignal chan string
 	StateMachineResponseChannel chan statemachine.StateMachineResponse
 

@@ -50,8 +50,6 @@ func (snpService *SnapshotService) Snapshot() error {
 
 	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snapshotEntry)
 	if setErr != nil { return setErr }
-	
-	snpService.SnapshotCompleteSignal <- true
 
 	delErr := snpService.CurrentSystem.WAL.DeleteLogs(lastAppliedLog.Index - 1)
 	if delErr != nil { 
