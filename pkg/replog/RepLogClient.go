@@ -145,7 +145,7 @@ func (rlService *ReplicatedLogService) ReplicateLogs(cmd *statemachine.StateMach
 						rlService.Log.Info("at least minimum successful responses received:", successfulResps)
 						rlService.Log.Info("applying logs to state machine and appending to write ahead log")
 
-						rlService.CurrentSystem.UpdateCommitIndex()
+						rlService.CurrentSystem.IncrementCommitIndex()
 						applyErr := rlService.ApplyLogs()
 						if applyErr != nil { rlService.Log.Error("error applying command to state machine:", applyErr.Error()) }
 					} else { rlService.Log.Warn("minimum successful responses not received.") }

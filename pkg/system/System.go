@@ -122,8 +122,20 @@ func (sys *System) UpdateNextIndex(newIndex int64) bool {
 	return true
 }
 
-func(sys *System) UpdateCommitIndex() bool {
+func(sys *System) IncrementCommitIndex() bool {
 	atomic.AddInt64(&sys.CommitIndex, 1)
 
+	return true
+}
+
+func(sys *System) UpdateCommitIndex(newCommitIndex int64) bool {
+	atomic.StoreInt64(&sys.CommitIndex, newCommitIndex)
+
+	return true
+}
+
+func(sys *System) UpdateLastApplied(newLastAppliedIndex int64) bool {
+	atomic.StoreInt64(&sys.LastApplied, newLastAppliedIndex)
+	
 	return true
 }

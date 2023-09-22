@@ -190,6 +190,11 @@ func (rlService *ReplicatedLogService) HandleReplicateLogs(req *replogrpc.Append
 		}
 
 		rlService.CurrentSystem.WAL.RangeAppend(logsToAppend)
+
+		latestLog, latestErr := rlService.CurrentSystem.WAL.GetLatest()
+		if latestErr != nil { return false, latestErr }
+
+		rlService.CurrentSystem.UpdateCommitIndex(latestLog.Index)
 	}
 
 	logAtCommitIndex, readErr := rlService.CurrentSystem.WAL.Read(req.LeaderCommitIndex)

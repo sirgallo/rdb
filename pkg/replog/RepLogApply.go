@@ -63,7 +63,7 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 		}
 	} 
 	
-	rlService.CurrentSystem.LastApplied = lastLogToBeApplied.Index
+	rlService.CurrentSystem.UpdateLastApplied(lastLogToBeApplied.Index)
 
 	bucketSizeInBytes, getSizeErr := rlService.CurrentSystem.WAL.GetBucketSizeInBytes()
 	if getSizeErr != nil { 
