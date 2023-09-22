@@ -23,19 +23,19 @@ func NewCustomLog(name string) *CustomLog {
 */
 
 func (cLog *CustomLog) Debug(msg ...interface{}) {
-	cLog.formatOutput(Debug, msg)
+	go cLog.formatOutput(Debug, msg)
 } 
 
 func (cLog *CustomLog) Error(msg ...interface{}) {
-	cLog.formatOutput(Error, msg)
+	go cLog.formatOutput(Error, msg)
 } 
 
 func (cLog *CustomLog) Info(msg ...interface{}) {
-	cLog.formatOutput(Info, msg)
+	go cLog.formatOutput(Info, msg)
 } 
 
 func (cLog *CustomLog) Warn(msg ...interface{}) {
-	cLog.formatOutput(Warn, msg)
+	go cLog.formatOutput(Warn, msg)
 }
 
 func (cLog *CustomLog) Fatal(msg ...interface{}) {

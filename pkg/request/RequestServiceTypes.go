@@ -23,7 +23,7 @@ type RequestService struct {
 	
 	RequestChannel chan *statemachine.StateMachineOperation
 	ResponseChannel chan *statemachine.StateMachineResponse
-	ClientMappedResponseChannel map[string]chan *statemachine.StateMachineResponse
+	ClientMappedResponseChannels sync.Map
 
 	Log clog.CustomLog
 }

@@ -1,6 +1,5 @@
 package request
 
-import "context"
 import "encoding/json"
 import "errors"
 import "io"
@@ -63,41 +62,28 @@ func (reqService *RequestService) RegisterCommandRoute() {
 
 				requestData.RequestID = hash
 
-				reqService.Mutex.Lock()
 				clientResponseChannel := make(chan *statemachine.StateMachineResponse)
-				reqService.ClientMappedResponseChannel[requestData.RequestID] = clientResponseChannel
-				reqService.Mutex.Unlock()
+				reqService.ClientMappedResponseChannels.Store(requestData.RequestID, clientResponseChannel)
 
-				ctx, cancel := context.WithTimeout(context.Background(), HTTPTimeout)
-				defer cancel()
+				reqService.RequestChannel <- requestData
+				responseData :=<- clientResponseChannel
 
-				select {
-					case <- ctx.Done():
-						delete(reqService.ClientMappedResponseChannel, requestData.RequestID)
-						
-						http.Error(w, "request timed out", http.StatusGatewayTimeout)
-						return
-					default:
-						reqService.RequestChannel <- requestData
-						responseData :=<- clientResponseChannel
+				reqService.ClientMappedResponseChannels.Delete(requestData.RequestID)
 
-						delete(reqService.ClientMappedResponseChannel, requestData.RequestID)
-
-						response := &statemachine.StateMachineResponse{
-							Collection: responseData.Collection,
-							Key: responseData.Key,
-							Value: responseData.Value,
-						}
-
-						responseJSON, encErr := json.Marshal(response)
-						if encErr != nil {
-							http.Error(w, "Failed to encode JSON response", http.StatusInternalServerError)
-							return
-						}
-
-						w.Header().Set("Content-Type", "application/json")
-						w.Write(responseJSON)
+				response := &statemachine.StateMachineResponse{
+					Collection: responseData.Collection,
+					Key: responseData.Key,
+					Value: responseData.Value,
 				}
+
+				responseJSON, encErr := json.Marshal(response)
+				if encErr != nil {
+					http.Error(w, "Failed to encode JSON response", http.StatusInternalServerError)
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(responseJSON)
 			} else {
 				redirectRequest := func() (bool, error) {
 					if reqService.CurrentSystem.CurrentLeader != utils.GetZero[string]() {
@@ -114,8 +100,6 @@ func (reqService *RequestService) RegisterCommandRoute() {
 							Header: r.Header.Clone(), 
 							Body:   r.Body,
 						}
-
-						reqService.Log.Info("redirecting request to:", location)
 
 						client := &http.Client{}
 						resp, postErr := client.Do(newReq)

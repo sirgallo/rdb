@@ -1,6 +1,7 @@
 package request
 
 import "net/http"
+import "sync"
 
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/statemachine"
@@ -25,7 +26,7 @@ func NewRequestService(opts *RequestServiceOpts) *RequestService {
 		CurrentSystem: opts.CurrentSystem,
 		RequestChannel: make(chan *statemachine.StateMachineOperation, RequestChannelSize),
 		ResponseChannel: make(chan *statemachine.StateMachineResponse, ResponseChannelSize),
-		ClientMappedResponseChannel: make(map[string]chan *statemachine.StateMachineResponse),
+		ClientMappedResponseChannels: sync.Map{},
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -55,13 +56,14 @@ func (reqService *RequestService) StartHTTPService() {
 
 	go func() {
 		for response := range reqService.ResponseChannel {
-			reqService.Mutex.Lock()
-			clientChannel, ok := reqService.ClientMappedResponseChannel[response.RequestID]
-			reqService.Mutex.Unlock()
+			go func(response *statemachine.StateMachineResponse) {
+				c, ok := reqService.ClientMappedResponseChannels.Load(response.RequestID)
 
-			if ok {
-				clientChannel <- response
-			} else { reqService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
+				if ok {
+					clientChannel := c.(chan *statemachine.StateMachineResponse)
+					clientChannel <- response
+				} else { reqService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
+			}(response)
 		}
 	}()
 }

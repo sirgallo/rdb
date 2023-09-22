@@ -92,7 +92,14 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 
 	go func() {
 		for newCmd := range rlService.AppendLogSignal {
-			if rlService.CurrentSystem.State == system.Leader { rlService.ReplicateLogs(newCmd) }
+			if rlService.CurrentSystem.State == system.Leader { 
+				if newCmd.Action == statemachine.FIND || newCmd.Action == statemachine.LISTCOLLECTIONS {
+					resp, readErr := rlService.CurrentSystem.StateMachine.Read(newCmd)
+					if readErr != nil { rlService.Log.Error("error reading:", readErr.Error()) }
+					
+					rlService.StateMachineResponseChannel <- resp
+				}	else { rlService.ReplicateLogs(newCmd)  }
+			}
 		}
 	}()
 

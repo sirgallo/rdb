@@ -108,6 +108,38 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 	return responses, nil
 }
 
+func (sm *StateMachine) Read(op *StateMachineOperation) (*StateMachineResponse, error) {
+	var response *StateMachineResponse
+
+	transaction := func(tx *bolt.Tx) error {
+		rootName := []byte(RootBucket)
+		root := tx.Bucket(rootName)
+
+		if op.Action == FIND {
+			searchResp, searchErr := sm.searchInCollection(root, &op.Payload)
+			if searchErr != nil { return searchErr }
+
+			searchResp.RequestID = op.RequestID
+
+			response = searchResp
+		} else if op.Action == LISTCOLLECTIONS {
+			listResp, listErr := sm.listCollections(root, &op.Payload)
+			if listErr != nil { return listErr }
+
+			listResp.RequestID = op.RequestID
+
+			response = listResp
+		}
+		
+		return nil
+	}
+
+	readErr := sm.DB.View(transaction)
+	if readErr != nil { return nil, readErr }
+
+	return response, nil
+}
+
 /*
 	All functions below are helper functions for each of the above state machine operations
 */
@@ -123,7 +155,6 @@ func (sm *StateMachine) listCollections(bucket *bolt.Bucket, payload *StateMachi
 	for key, val := cursor.First(); key != nil; key, val = cursor.Next() {
 		collections = append(collections, string(val))
 	}
-
 
 	return &StateMachineResponse{
 		Value: strings.Join(collections, ", "),
