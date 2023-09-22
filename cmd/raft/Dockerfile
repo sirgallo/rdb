@@ -2,6 +2,8 @@ FROM golang:1.20 as dependencies
 
 FROM dependencies 
 
+RUN apt-get update && apt-get install -y iputils-ping
+
 ENV HOME /home
 
 WORKDIR $HOME/raft
@@ -17,7 +19,5 @@ EXPOSE 8080
 EXPOSE 54321
 EXPOSE 54322
 EXPOSE 54323
-EXPOSE 54324
-EXPOSE 54325
 
 CMD ["./raftsrv"]

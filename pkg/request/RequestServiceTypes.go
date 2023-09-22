@@ -1,4 +1,4 @@
-package httpservice
+package request
 
 import "net/http"
 import "sync"
@@ -9,12 +9,12 @@ import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 
 
-type HTTPServiceOpts struct {
+type RequestServiceOpts struct {
 	Port int
 	CurrentSystem *system.System
 }
 
-type HTTPService struct {
+type RequestService struct {
 	Mux *http.ServeMux
 	Port string
 	Mutex sync.Mutex

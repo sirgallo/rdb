@@ -34,30 +34,31 @@ func (raft *RaftService) StartModulePassThroughs() {
 		}
 	}()
 
+	/*
 	go func() {
 		for cmd := range raft.Relay.RelayedAppendLogSignal {
 			raft.ReplicatedLog.AppendLogSignal <- cmd
 		}
 	}()
+	*/
 
 	go func() {
-		for cmdEntry := range raft.HTTPService.RequestChannel {
+		for cmdEntry := range raft.RequestService.RequestChannel {
 			if raft.CurrentSystem.State == system.Leader {
 				raft.ReplicatedLog.AppendLogSignal <- cmdEntry
-			} else { raft.Relay.RelayChannel <- cmdEntry }
+			}
 		}
 	}()
 
 	go func() {
 		for response := range raft.ReplicatedLog.StateMachineResponseChannel {
 			if raft.CurrentSystem.State == system.Leader {
-				if response.RequestOrigin == raft.CurrentSystem.Host {
-					raft.HTTPService.ResponseChannel <- response
-				} else { raft.ForwardResp.LeaderRelayResponseChannel <- response }
+				raft.RequestService.ResponseChannel <- response
 			}
 		}
 	}()
 
+	/*
 	go func() {
 		for response := range raft.ForwardResp.ForwardRespChannel {
 			if raft.CurrentSystem.State == system.Follower {
@@ -67,6 +68,7 @@ func (raft *RaftService) StartModulePassThroughs() {
 			}
 		}
 	}()
+	*/
 
 	go func() {
 		for range raft.ReplicatedLog.SignalStartSnapshot {

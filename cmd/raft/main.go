@@ -32,12 +32,10 @@ func main() {
 	raftOpts := service.RaftServiceOpts{
 		Protocol: "tcp",
 		Ports: service.RaftPortOpts{
-			HTTPService: 8080,
+			RequestService: 8080,
 			LeaderElection: 54321,
 			ReplicatedLog: 54322,
-			Relay: 54323,
-			ForwardResp: 54324,
-			Snapshot: 54325,
+			Snapshot: 54323,
 		},
 		SystemsList: otherSystems,
 		ConnPoolOpts: connpool.ConnectionPoolOpts{ MaxConn: 10 },

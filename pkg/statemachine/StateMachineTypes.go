@@ -14,14 +14,14 @@ type StateMachineOpPayload struct {
 
 type StateMachineOperation struct {
 	RequestID string `json:"-"`
-	RequestOrigin string `json:"-"`
+	// RequestOrigin string `json:"-"`
 	Action Action `json:"action"`
 	Payload StateMachineOpPayload `json:"payload"`
 }
 
 type StateMachineResponse struct {
 	RequestID string `json:"-"`
-	RequestOrigin string `json:"-"`
+	// RequestOrigin string `json:"-"`
 	Collection string `json:"collection"`
 	Key string `json:"key"`
 	Value string `json:"value"`

@@ -1,4 +1,4 @@
-package httpservice
+package request
 
 import "net/http"
 
@@ -7,7 +7,7 @@ import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/utils"
 
 
-//=========================================== HTTP Service
+//=========================================== Request Service
 
 
 /*
@@ -16,10 +16,10 @@ import "github.com/sirgallo/raft/pkg/utils"
 		for sending operations to perform on the state machine
 */
 
-func NewHTTPService(opts *HTTPServiceOpts) *HTTPService {
+func NewRequestService(opts *RequestServiceOpts) *RequestService {
 	mux := http.NewServeMux()
 
-	httpService := &HTTPService{
+	reqService := &RequestService{
 		Mux: mux,
 		Port: utils.NormalizePort(opts.Port),
 		CurrentSystem: opts.CurrentSystem,
@@ -29,13 +29,13 @@ func NewHTTPService(opts *HTTPServiceOpts) *HTTPService {
 		Log: *clog.NewCustomLog(NAME),
 	}
 
-	httpService.RegisterCommandRoute()
+	reqService.RegisterCommandRoute()
 
-	return httpService
+	return reqService
 }
 
 /*
-	Start HTTP Service
+	Start Request Service
 		separate go routines:
 			1.) http server
 				--> start the server to begin listening for client requests
@@ -45,23 +45,23 @@ func NewHTTPService(opts *HTTPServiceOpts) *HTTPService {
 					returned to the client
 */
 
-func (httpService *HTTPService) StartHTTPService() {
+func (reqService *RequestService) StartHTTPService() {
 	go func() {
-		httpService.Log.Info("http service starting up on port:", httpService.Port)
+		reqService.Log.Info("http service starting up on port:", reqService.Port)
 
-		srvErr := http.ListenAndServe(httpService.Port, httpService.Mux)
-		if srvErr != nil { httpService.Log.Fatal("unable to start http service") }
+		srvErr := http.ListenAndServe(reqService.Port, reqService.Mux)
+		if srvErr != nil { reqService.Log.Fatal("unable to start http service") }
 	}()
 
 	go func() {
-		for response := range httpService.ResponseChannel {
-			httpService.Mutex.Lock()
-			clientChannel, ok := httpService.ClientMappedResponseChannel[response.RequestID]
-			httpService.Mutex.Unlock()
+		for response := range reqService.ResponseChannel {
+			reqService.Mutex.Lock()
+			clientChannel, ok := reqService.ClientMappedResponseChannel[response.RequestID]
+			reqService.Mutex.Unlock()
 
 			if ok {
 				clientChannel <- response
-			} else { httpService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
+			} else { reqService.Log.Warn("no channel for resp associated with req id:", response.RequestID) }
 		}
 	}()
 }

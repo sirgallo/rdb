@@ -3,22 +3,22 @@ package service
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/connpool"
-import "github.com/sirgallo/raft/pkg/forwardresp"
-import "github.com/sirgallo/raft/pkg/httpservice"
+// import "github.com/sirgallo/raft/pkg/forwardresp"
+import "github.com/sirgallo/raft/pkg/request"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/replog"
-import "github.com/sirgallo/raft/pkg/relay"
+// import "github.com/sirgallo/raft/pkg/relay"
 import "github.com/sirgallo/raft/pkg/snapshot"
 import "github.com/sirgallo/raft/pkg/statemachine"
 import "github.com/sirgallo/raft/pkg/system"
 
 
 type RaftPortOpts struct {
-	HTTPService int
+	RequestService int
 	LeaderElection int
 	ReplicatedLog int
-	Relay int
-	ForwardResp int
+	// Relay int
+	// ForwardResp int
 	Snapshot int
 }
 
@@ -35,11 +35,11 @@ type RaftService struct {
 	CurrentSystem *system.System
 	Systems *sync.Map
 
-	HTTPService *httpservice.HTTPService
+	RequestService *request.RequestService
 	LeaderElection *leaderelection.LeaderElectionService
 	ReplicatedLog *replog.ReplicatedLogService
-	Relay *relay.RelayService
-	ForwardResp *forwardresp.ForwardRespService
+	// Relay *relay.RelayService
+	// ForwardResp *forwardresp.ForwardRespService
 	Snapshot *snapshot.SnapshotService
 
 	CommandChannel chan statemachine.StateMachineOperation

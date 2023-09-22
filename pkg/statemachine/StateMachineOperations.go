@@ -61,7 +61,7 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if searchErr != nil { return searchErr }
 
 				searchResp.RequestID = op.RequestID
-				searchResp.RequestOrigin = op.RequestOrigin
+				// searchResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, searchResp)
 			} else if op.Action == INSERT {
@@ -69,7 +69,7 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if insertErr != nil { return insertErr}
 
 				insertResp.RequestID = op.RequestID
-				insertResp.RequestOrigin = op.RequestOrigin
+				// insertResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, insertResp)
 			} else if op.Action == DELETE {
@@ -77,7 +77,7 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if deleteErr != nil { return deleteErr }
 
 				deleteResp.RequestID = op.RequestID
-				deleteResp.RequestOrigin = op.RequestOrigin
+				// deleteResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, deleteResp)
 			} else if op.Action == DROPCOLLECTION {
@@ -85,7 +85,7 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if dropErr != nil { return dropErr }
 
 				dropResp.RequestID = op.RequestID
-				dropResp.RequestOrigin = op.RequestOrigin
+				// dropResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, dropResp)
 			}	else if op.Action == LISTCOLLECTIONS {
@@ -93,7 +93,7 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if listErr != nil { return listErr }
 
 				listResp.RequestID = op.RequestID
-				listResp.RequestOrigin = op.RequestOrigin
+				// listResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, listResp)
 			}
