@@ -56,20 +56,11 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 			_, createCollectionErr := sm.createCollection(root, op.Payload.Collection)
 			if createCollectionErr != nil { return createCollectionErr }
 
-			if op.Action == FIND {
-				searchResp, searchErr := sm.searchInCollection(root, &op.Payload)
-				if searchErr != nil { return searchErr }
-
-				searchResp.RequestID = op.RequestID
-				// searchResp.RequestOrigin = op.RequestOrigin
-
-				responses = append(responses, searchResp)
-			} else if op.Action == INSERT {
+			if op.Action == INSERT {
 				insertResp, insertErr := sm.insertIntoCollection(root, &op.Payload)
 				if insertErr != nil { return insertErr}
 
 				insertResp.RequestID = op.RequestID
-				// insertResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, insertResp)
 			} else if op.Action == DELETE {
@@ -77,7 +68,6 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if deleteErr != nil { return deleteErr }
 
 				deleteResp.RequestID = op.RequestID
-				// deleteResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, deleteResp)
 			} else if op.Action == DROPCOLLECTION {
@@ -85,17 +75,8 @@ func (sm *StateMachine) BulkApply(ops []*StateMachineOperation) ([]*StateMachine
 				if dropErr != nil { return dropErr }
 
 				dropResp.RequestID = op.RequestID
-				// dropResp.RequestOrigin = op.RequestOrigin
 
 				responses = append(responses, dropResp)
-			}	else if op.Action == LISTCOLLECTIONS {
-				listResp, listErr := sm.listCollections(root, &op.Payload)
-				if listErr != nil { return listErr }
-
-				listResp.RequestID = op.RequestID
-				// listResp.RequestOrigin = op.RequestOrigin
-
-				responses = append(responses, listResp)
 			}
 		}
 
@@ -197,7 +178,7 @@ func (sm *StateMachine) deleteFromCollection(bucket *bolt.Bucket, payload *State
 	collection := bucket.Bucket(collectionName)
 
 	indexResp, searchErr := sm.searchInIndex(bucket, payload)
-	if searchErr != nil { return nil, searchErr }
+	if searchErr != nil { return &StateMachineResponse{ Collection: payload.Collection }, searchErr }
 
 	delErr := collection.Delete([]byte(indexResp.Key))
 	if delErr != nil { return nil, delErr }
@@ -239,7 +220,7 @@ func (sm *StateMachine) dropCollection(bucket *bolt.Bucket, payload *StateMachin
 func (sm *StateMachine) searchInIndex(bucket *bolt.Bucket, payload *StateMachineOpPayload) (*StateMachineResponse, error) {
 	indexName := []byte(payload.Collection + IndexSuffix)
 	index := bucket.Bucket(indexName)
-	if index == nil { return nil, nil }
+	if index == nil { return &StateMachineResponse{ Collection: payload.Collection }, nil }
 
 	indexKey := []byte(payload.Value)
 	val := index.Get(indexKey)
@@ -256,7 +237,7 @@ func (sm *StateMachine) searchInIndex(bucket *bolt.Bucket, payload *StateMachine
 func (sm *StateMachine) insertIntoIndex(bucket *bolt.Bucket, payload *StateMachineOpPayload, colKey []byte) (*StateMachineResponse, error) {
 	indexName := []byte(payload.Collection + IndexSuffix)
 	index := bucket.Bucket(indexName)
-	if index == nil { return nil, nil }
+	if index == nil { return &StateMachineResponse{ Collection: payload.Collection }, nil }
 
 	indexKey := []byte(payload.Value)
 	putErr := index.Put(indexKey, colKey)
@@ -272,11 +253,11 @@ func (sm *StateMachine) insertIntoIndex(bucket *bolt.Bucket, payload *StateMachi
 func (sm *StateMachine) deleteFromIndex(bucket *bolt.Bucket, payload *StateMachineOpPayload) (*StateMachineResponse, error) {
 	indexName := []byte(payload.Collection + IndexSuffix)
 	index := bucket.Bucket(indexName)
-	if index == nil { return nil, nil }
+	if index == nil { return &StateMachineResponse{ Collection: payload.Collection }, nil }
 
 	indexKey := []byte(payload.Value)
 	val := index.Get(indexKey)
-	if val == nil { return nil, nil }
+	if val == nil { return &StateMachineResponse{ Collection: payload.Collection }, nil }
 
 	delErr := index.Delete(indexKey)
 	if delErr != nil { return nil, delErr }

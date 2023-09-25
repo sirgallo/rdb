@@ -25,6 +25,8 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		CurrentSystem: opts.CurrentSystem,
 		Systems: opts.Systems,
 		AppendLogSignal: make(chan *statemachine.StateMachineOperation, AppendLogBuffSize),
+		ReadChannel: make(chan *statemachine.StateMachineOperation, AppendLogBuffSize),
+		WriteChannel: make(chan *statemachine.StateMachineOperation, AppendLogBuffSize),
 		LeaderAcknowledgedSignal: make(chan bool),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
@@ -94,12 +96,24 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 		for newCmd := range rlService.AppendLogSignal {
 			if rlService.CurrentSystem.State == system.Leader { 
 				if newCmd.Action == statemachine.FIND || newCmd.Action == statemachine.LISTCOLLECTIONS {
-					resp, readErr := rlService.CurrentSystem.StateMachine.Read(newCmd)
-					if readErr != nil { rlService.Log.Error("error reading:", readErr.Error()) }
-					
-					rlService.StateMachineResponseChannel <- resp
-				}	else { rlService.ReplicateLogs(newCmd)  }
+					rlService.ReadChannel <- newCmd
+				}	else { rlService.WriteChannel <- newCmd  }
 			}
+		}
+	}()
+
+	go func() {
+		for readCmd := range rlService.ReadChannel {
+			resp, readErr := rlService.CurrentSystem.StateMachine.Read(readCmd)
+			if readErr != nil { rlService.Log.Error("error reading:", readErr.Error()) }
+			
+			rlService.StateMachineResponseChannel <- resp
+		}
+	}()
+
+	go func() {
+		for writeCmd := range rlService.WriteChannel {
+			rlService.ReplicateLogs(writeCmd)
 		}
 	}()
 

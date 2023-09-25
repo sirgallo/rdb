@@ -31,6 +31,8 @@ type ReplicatedLogService struct {
 	HeartBeatTimer *time.Timer
 
 	AppendLogSignal chan *statemachine.StateMachineOperation
+	ReadChannel chan *statemachine.StateMachineOperation
+	WriteChannel chan *statemachine.StateMachineOperation
 	LeaderAcknowledgedSignal chan bool
 	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
