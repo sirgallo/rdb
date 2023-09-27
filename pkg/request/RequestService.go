@@ -46,7 +46,7 @@ func NewRequestService(opts *RequestServiceOpts) *RequestService {
 					returned to the client
 */
 
-func (reqService *RequestService) StartHTTPService() {
+func (reqService *RequestService) StartRequestService() {
 	go func() {
 		reqService.Log.Info("http service starting up on port:", reqService.Port)
 

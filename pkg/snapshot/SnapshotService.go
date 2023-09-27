@@ -1,12 +1,12 @@
 package snapshot
 
 import "net"
+import "google.golang.org/grpc"
 
 import "github.com/sirgallo/raft/pkg/logger"
 import "github.com/sirgallo/raft/pkg/snapshotrpc"
 import "github.com/sirgallo/raft/pkg/system"
 import "github.com/sirgallo/raft/pkg/utils"
-import "google.golang.org/grpc"
 
 
 //=========================================== Snapshot Service
@@ -63,7 +63,7 @@ func (snpService *SnapshotService) StartSnapshotService(listener *net.Listener) 
 func (snpService *SnapshotService) StartSnapshotListener() {
 	go func() {
 		for range snpService.SnapshotStartSignal {
-			if snpService.CurrentSystem.State == system.Leader && snpService.CurrentSystem.Status != system.Busy { 
+			if snpService.CurrentSystem.State == system.Leader { 
 				snapshotErr := snpService.Snapshot() 
 				if snapshotErr != nil { snpService.Log.Error("error snapshotting state and broadcasting to followers:", snapshotErr.Error()) }
 			}

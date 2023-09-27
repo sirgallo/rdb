@@ -1,6 +1,5 @@
 package replog
 
-
 import "github.com/sirgallo/raft/pkg/log"
 import "github.com/sirgallo/raft/pkg/replogrpc"
 import "github.com/sirgallo/raft/pkg/statemachine"
@@ -31,9 +30,7 @@ func (rlService *ReplicatedLogService) determineBatchSize() int {
 		--> create the rpc request from the Log Entry
 */
 
-func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, isHeartbeat bool) (*replogrpc.AppendEntry, error) {
-	sysHostPtr := &rlService.CurrentSystem.Host
-
+func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(lastLogIndex int64, nextIndex int64, isHeartbeat bool) (*replogrpc.AppendEntry, error) {
 	transformLogEntry := func(logEntry *log.LogEntry) *replogrpc.LogEntry {
 		cmd, encErr := utils.EncodeStructToString[statemachine.StateMachineOperation](logEntry.Command)
 		if encErr != nil { 
@@ -51,7 +48,7 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 	var previousLogIndex, previousLogTerm int64
 	var entries []*replogrpc.LogEntry
 
-	lastLogIndex, lastLogTerm, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
+	lastLog, lastLogErr := rlService.CurrentSystem.WAL.Read(lastLogIndex)
 	if lastLogErr != nil { return nil, lastLogErr }
 
 	if isHeartbeat {
@@ -59,7 +56,13 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 			previousLogIndex = lastLogIndex
 		} else { previousLogIndex = utils.GetZero[int64]() }
 
-		previousLogTerm = lastLogTerm
+		if lastLog == nil {
+			lastLog = &log.LogEntry{
+				Term: utils.GetZero[int64](),
+			}
+		}
+		
+		previousLogTerm = lastLog.Term
 		entries = nil
 	} else {
 		previousLog, readErr := rlService.CurrentSystem.WAL.Read(nextIndex - 1)
@@ -75,7 +78,7 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 
 		entriesToSend, entriesErr := func() ([]*log.LogEntry, error) {
 			batchSize := rlService.determineBatchSize()
-			totalToSend := nextIndex - previousLogIndex
+			totalToSend := lastLogIndex - nextIndex
 
 			if totalToSend <= int64(batchSize) {
 				allEntries, rangeErr := rlService.CurrentSystem.WAL.GetRange(nextIndex, lastLogIndex)
@@ -83,7 +86,7 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 
 				return allEntries, nil
 			} else { 
-				indexUpToBatch := nextIndex + int64(batchSize)
+				indexUpToBatch := nextIndex + int64(batchSize - 1)
 				entriesInBatch, rangeErr := rlService.CurrentSystem.WAL.GetRange(nextIndex, indexUpToBatch)
 				if rangeErr != nil { return nil, rangeErr }
 
@@ -98,7 +101,7 @@ func (rlService *ReplicatedLogService) PrepareAppendEntryRPC(nextIndex int64, is
 
 	appendEntry := &replogrpc.AppendEntry{
 		Term: rlService.CurrentSystem.CurrentTerm,
-		LeaderId: *sysHostPtr,
+		LeaderId: rlService.CurrentSystem.Host,
 		PrevLogIndex: previousLogIndex,
 		PrevLogTerm: previousLogTerm,
 		Entries: entries,
@@ -146,4 +149,15 @@ func (rlService *ReplicatedLogService) resetTimer() {
 	}
 
 	rlService.HeartBeatTimer.Reset(HeartbeatInterval)
+}
+
+func (rlService *ReplicatedLogService) resetReplogTimer() {
+	if ! rlService.ReplicateLogsTimer.Stop() {
+		select {
+			case <-rlService.ReplicateLogsTimer.C:
+			default:
+		}
+	}
+
+	rlService.ReplicateLogsTimer.Reset(RepLogInterval)
 }

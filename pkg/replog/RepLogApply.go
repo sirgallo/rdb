@@ -35,11 +35,14 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 	
 	if start == end {
 		entry, readErr := rlService.CurrentSystem.WAL.Read(start)
+		if entry == nil { return nil }
 		if readErr != nil { return readErr }
 
-		if entry != nil { logsToBeApplied = append(logsToBeApplied, entry) }
+		logsToBeApplied = append(logsToBeApplied, entry)
+
 	} else {
 		entries, rangeErr := rlService.CurrentSystem.WAL.GetRange(start, end)
+		if entries == nil { return nil }
 		if rangeErr != nil { return rangeErr }
 
 		logsToBeApplied = append(logsToBeApplied, entries...) 

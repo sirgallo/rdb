@@ -19,7 +19,9 @@ import "github.com/sirgallo/raft/pkg/utils"
 		1.) the current system updates itself to candidate state, votes for itself, and updates the term monotonically
 		2.) send RequestVoteRPCs in parallel
 		3.) if the candidate receives the minimum number of votes required to be a leader (so quorum),
-			the leader updates its state to Leader and immediately sends heartbeats to establish authority
+			the leader updates its state to Leader and immediately sends heartbeats to establish authority. On transition
+			to leader, the new leader will also update the next index of all of the known systems to reflect the last log
+			index on the system
 		4.) if a higher term is discovered, update the current term of the candidate to reflect this and revert back to
 			Follower state
 		5.) otherwise, set the system back to Follower, reset the VotedFor field, and reinitialize the
@@ -49,6 +51,7 @@ func (leService *LeaderElectionService) Election() error {
 				case <- leRespChans.BroadcastClose:
 					if votesGranted >= int64(minimumVotes) {
 						leService.CurrentSystem.TransitionToLeader()
+						
 						lastLogIndex, _, lastLogErr := leService.CurrentSystem.DetermineLastLogIdxAndTerm()
 						if lastLogErr != nil { 
 							electionErrChan <- lastLogErr 

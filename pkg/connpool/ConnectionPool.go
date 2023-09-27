@@ -5,6 +5,7 @@ import "errors"
 import "google.golang.org/grpc"
 import "google.golang.org/grpc/connectivity"
 import "google.golang.org/grpc/credentials/insecure"
+import "google.golang.org/grpc/encoding/gzip"
 
 
 //=========================================== Connection Pool
@@ -38,6 +39,8 @@ func NewConnectionPool(opts ConnectionPoolOpts) *ConnectionPool {
 			the connection is ready for work, return the connection
 		3.) if the address was not loaded, create a new grpc connection and store the new connection at
 		the key associated with the address/host and return the new connection
+		
+		for grpc connection opts, we will automatically compress the rpc on the wire
 */
 
 func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientConn, error) {
@@ -50,7 +53,12 @@ func (cp *ConnectionPool) GetConnection(addr string, port string) (*grpc.ClientC
 		}
 	}
 
-	newConn, connErr := grpc.Dial(addr + port, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.UseCompressor(gzip.Name)),
+	}
+
+	newConn, connErr := grpc.Dial(addr + port, opts...)
 	if connErr != nil { 
 		cp.connections.Delete(addr)
 		return nil, connErr 

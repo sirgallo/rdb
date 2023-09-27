@@ -60,15 +60,15 @@ func (reqService *RequestService) RegisterCommandRoute() {
 					return
 				}
 
-				requestData.RequestID = hash
-
 				clientResponseChannel := make(chan *statemachine.StateMachineResponse)
-				reqService.ClientMappedResponseChannels.Store(requestData.RequestID, clientResponseChannel)
+				reqService.ClientMappedResponseChannels.Store(hash, clientResponseChannel)
+
+				requestData.RequestID = hash
 
 				reqService.RequestChannel <- requestData
 				responseData :=<- clientResponseChannel
 
-				reqService.ClientMappedResponseChannels.Delete(requestData.RequestID)
+				reqService.ClientMappedResponseChannels.Delete(hash)
 
 				response := &statemachine.StateMachineResponse{
 					Collection: responseData.Collection,
@@ -96,25 +96,19 @@ func (reqService *RequestService) RegisterCommandRoute() {
 
 						newReq := &http.Request{
 							Method: r.Method,
-							URL:    parsedURL,
+							URL: parsedURL,
 							Header: r.Header.Clone(), 
 							Body:   r.Body,
 						}
 
 						client := &http.Client{}
 						resp, postErr := client.Do(newReq)
-						if postErr != nil {
-							http.Error(w, "Failed to perform request to target", http.StatusInternalServerError)
-							return false, postErr
-						}
+						if postErr != nil { return false, postErr }
 						
 						defer resp.Body.Close()
 
 						responseBody, readErr := io.ReadAll(resp.Body)
-						if readErr != nil {
-							http.Error(w, "Failed to read response from target", http.StatusInternalServerError)
-							return false, readErr
-						}
+						if readErr != nil { return false, readErr }
 
 						w.Header().Set("Content-Type", "application/json")
 						w.Write(responseBody)
@@ -124,7 +118,7 @@ func (reqService *RequestService) RegisterCommandRoute() {
 				}
 
 				maxRetries := 5
-				expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 10 }
+				expOpts := utils.ExpBackoffOpts{ MaxRetries: &maxRetries, TimeoutInMilliseconds: 50 }
 				expBackoff := utils.NewExponentialBackoffStrat[bool](expOpts)
 
 				_, redirectErr := expBackoff.PerformBackoff(redirectRequest)

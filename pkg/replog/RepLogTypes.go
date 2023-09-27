@@ -29,6 +29,7 @@ type ReplicatedLogService struct {
 	Systems *sync.Map
 	
 	HeartBeatTimer *time.Timer
+	ReplicateLogsTimer *time.Timer
 
 	AppendLogSignal chan *statemachine.StateMachineOperation
 	ReadChannel chan *statemachine.StateMachineOperation
@@ -41,6 +42,10 @@ type ReplicatedLogService struct {
 	SignalCompleteSnapshot chan bool
 	SendSnapshotToSystemSignal chan string
 	StateMachineResponseChannel chan *statemachine.StateMachineResponse
+	AppendedChannel chan bool
+	ApplyLogsFollowerChannel chan int64
+	AppendLogsFollowerRespChannel chan bool
+	AppendLogsFollowerChannel chan *replogrpc.AppendEntry
 
 	Log clog.CustomLog
 }
@@ -59,7 +64,8 @@ type RLResponseChannels struct {
 
 const NAME = "Replicated Log"
 const HeartbeatInterval = 50 * time.Millisecond
-const RPCTimeout = 50 * time.Millisecond
+const RepLogInterval = 150 * time.Millisecond
+const RPCTimeout = 200 * time.Millisecond
 const AppendLogBuffSize = 1000000
 const ResponseBuffSize = 100000
-const FractionOfAvailableSizeToTake = 500
+const FractionOfAvailableSizeToTake = 1000 // let's take consistent snapshots

@@ -1,15 +1,11 @@
 package service
 
-import "net"
 import "os"
 import "sync"
 
 import "github.com/sirgallo/raft/pkg/connpool"
-// "github.com/sirgallo/raft/pkg/forwardresp"
-// "github.com/sirgallo/raft/pkg/httpservice"
 import "github.com/sirgallo/raft/pkg/leaderelection"
 import "github.com/sirgallo/raft/pkg/logger"
-// import "github.com/sirgallo/raft/pkg/relay"
 import "github.com/sirgallo/raft/pkg/replog"
 import "github.com/sirgallo/raft/pkg/request"
 import "github.com/sirgallo/raft/pkg/snapshot"
@@ -53,7 +49,6 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 		Protocol: opts.Protocol,
 		Systems: &sync.Map{},
 		CurrentSystem: currentSystem,
-		CommandChannel: make(chan statemachine.StateMachineOperation, CommandChannelBuffSize),
 	}
 
 	for _, sys := range opts.SystemsList {
@@ -65,8 +60,6 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 
 	leConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	rlConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
-	// rConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
-	// frConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 	snpConnPool := connpool.NewConnectionPool(opts.ConnPoolOpts)
 
 	reqOpts := &request.RequestServiceOpts{
@@ -88,22 +81,6 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 		Systems: raft.Systems,
 	}
 
-	/*
-	rOpts := &relay.RelayOpts{
-		Port: opts.Ports.Relay,
-		ConnectionPool: rConnPool,
-		CurrentSystem: currentSystem,
-		Systems: raft.Systems,
-	}
-
-	frOpts := &forwardresp.ForwardRespOpts{
-		Port: opts.Ports.ForwardResp,
-		ConnectionPool: frConnPool,
-		CurrentSystem: currentSystem,
-		Systems: raft.Systems,
-	}
-	*/
-
 	snpOpts := &snapshot.SnapshotServiceOpts{
 		Port: opts.Ports.Snapshot,
 		ConnectionPool: snpConnPool,
@@ -114,15 +91,11 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 	httpService := request.NewRequestService(reqOpts)
 	leService := leaderelection.NewLeaderElectionService(leOpts)
 	rlService := replog.NewReplicatedLogService(rlOpts)
-	// rService := relay.NewRelayService(rOpts)
-	// frService := forwardresp.NewForwardRespService(frOpts)
 	snpService := snapshot.NewSnapshotService(snpOpts)
 
 	raft.RequestService = httpService
 	raft.LeaderElection = leService
 	raft.ReplicatedLog = rlService
-	// raft.Relay = rService
-	// raft.ForwardResp = frService
 	raft.Snapshot = snpService
 
 	return raft
@@ -141,7 +114,7 @@ func NewRaftService(opts RaftServiceOpts) *RaftService {
 
 			update replicated logs on startup
 
-		2.) start http net listeners and all sub modules
+		2.) start all sub modules
 		3.) start module pass throughs 
 */
 
@@ -161,36 +134,4 @@ func (raft *RaftService) StartRaftService() {
 	raft.StartModulePassThroughs()
 	
 	select {}
-}
-
-/*
-	Start Modules
-		initialize net listeners and start all sub modules
-*/
-
-func (raft *RaftService) StartModules() {
-	leListener, leErr := net.Listen(raft.Protocol, raft.LeaderElection.Port)
-	if leErr != nil { Log.Error("Failed to listen: %v", leErr.Error()) }
-
-	rlListener, rlErr := net.Listen(raft.Protocol, raft.ReplicatedLog.Port)
-	if rlErr != nil { Log.Error("Failed to listen: %v", rlErr.Error()) }
-
-	/*
-	rListener, rErr := net.Listen(raft.Protocol, raft.Relay.Port)
-	if rErr != nil { Log.Error("Failed to listen: %v", rErr.Error()) }
-	*/
-	snpListener, snpErr := net.Listen(raft.Protocol, raft.Snapshot.Port)
-	if snpErr != nil { Log.Error("Failed to listen: %v", snpErr.Error()) }
-
-	/*
-	frListener, frErr := net.Listen(raft.Protocol, raft.ForwardResp.Port)
-	if frErr != nil { Log.Error("Failed to listen: %v", frErr.Error()) }
-	*/
-	go raft.ReplicatedLog.StartReplicatedLogService(&rlListener)
-	go raft.LeaderElection.StartLeaderElectionService(&leListener)
-	// go raft.Relay.StartRelayService(&rListener)
-	// go raft.ForwardResp.StartForwardRespService(&frListener)
-	go raft.Snapshot.StartSnapshotService(&snpListener)
-
-	go raft.RequestService.StartHTTPService()
 }

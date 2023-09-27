@@ -45,7 +45,8 @@ func (leService *LeaderElectionService) RequestVoteRPC(ctx context.Context, req 
 		sys.UpdateNextIndex(lastLogIndex)
 	}
 
-	leService.Log.Info("req current term:", req.CurrentTerm, "system current term:", leService.CurrentSystem.CurrentTerm)
+	leService.Log.Debug("received requestVoteRPC from:", req.CandidateId)
+	leService.Log.Debug("req current term:", req.CurrentTerm, "system current term:", leService.CurrentSystem.CurrentTerm)
 	leService.Log.Debug("latest log index:", lastLogIndex, "req last log index:", req.LastLogIndex)
 	
 	if leService.CurrentSystem.VotedFor == utils.GetZero[string]() || leService.CurrentSystem.VotedFor == req.CandidateId {

@@ -220,6 +220,11 @@ func (snpService *SnapshotService) ClientSnapshotRPC(sys *system.System, initSna
 	return res, nil
 }
 
+/*
+	Read Snapshot Content Stream
+		when sending the snapshot, read the current snapshot file in chunks to create a read stream
+*/
+
 func (snpService *SnapshotService) ReadSnapshotContentStream(snapshotFilePath string, snapshotStreamChannel chan []byte) error {
 	snapshotFile, openErr := os.Open(snapshotFilePath)
 	if openErr != nil { return openErr }

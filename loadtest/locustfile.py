@@ -19,9 +19,9 @@ def randomString(length):
 
 class MyUser(FastHttpUser):
   host = HOST
-  wait_time = between(1, 3)  # Random wait time between requests
+  wait_time = between(0.1, 0.5)  # Random wait time between requests
 
-  @task(1)
+  @task(2)
   def insert(self):
     payload = {
       'action': 'insert',
@@ -33,7 +33,7 @@ class MyUser(FastHttpUser):
 
     response = self.client.post(ENDPOINT, json=payload, verify=False)
 
-  @task(9)
+  @task(8)
   def find(self):
     payload = {
       'action': 'find',

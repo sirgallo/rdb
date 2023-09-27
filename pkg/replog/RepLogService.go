@@ -34,6 +34,10 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		SignalCompleteSnapshot: make(chan bool),
 		SendSnapshotToSystemSignal: make(chan string),
 		StateMachineResponseChannel: make(chan *statemachine.StateMachineResponse, ResponseBuffSize),
+		AppendedChannel: make(chan bool, 1),
+		AppendLogsFollowerChannel: make(chan *replogrpc.AppendEntry, AppendLogBuffSize),
+		AppendLogsFollowerRespChannel: make(chan bool),
+		ApplyLogsFollowerChannel: make(chan int64),
 		Log: *clog.NewCustomLog(NAME),
 	}
 
@@ -78,7 +82,10 @@ func (rlService *ReplicatedLogService) StartReplicatedLogService(listener *net.L
 
 func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
+	rlService.ReplicateLogsTimer = time.NewTimer(RepLogInterval)
+	
 	timeoutChan := make(chan bool)
+	replicateLogsChan := make(chan bool)
 
 	go func() {
 		for {
@@ -89,6 +96,13 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 					timeoutChan <- true
 					rlService.resetTimer()
 			}
+		}
+	}()
+
+	go func() {
+		for range rlService.ReplicateLogsTimer.C {
+			replicateLogsChan <- true
+			rlService.resetReplogTimer()
 		}
 	}()
 
@@ -111,9 +125,39 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 		}
 	}()
 
+	
 	go func() {
 		for writeCmd := range rlService.WriteChannel {
-			rlService.ReplicateLogs(writeCmd)
+			appendErr := rlService.AppendWALSync(writeCmd)
+			if appendErr != nil { rlService.Log.Error("append error:", appendErr.Error()) }
+		}
+	}()
+
+	go func() {
+		for range replicateLogsChan {
+			if rlService.CurrentSystem.State == system.Leader {
+				replicationErr := rlService.ReplicateLogs()
+				if replicationErr != nil { rlService.Log.Error("error on replication:", replicationErr.Error()) }
+			}
+		}
+	}()
+
+	go func() {
+		for req := range rlService.AppendLogsFollowerChannel {
+			_, appendErr := rlService.AppendLogsToReplog(req)
+			if appendErr != nil { 
+				rlService.Log.Error("error appending logs to follower:", appendErr.Error()) 
+				rlService.AppendLogsFollowerRespChannel <- false
+			} else {
+				rlService.AppendLogsFollowerRespChannel <- true
+			}
+		}
+	}()
+
+	go func() {
+		for commitIndex := range rlService.ApplyLogsFollowerChannel {
+			applyErr := rlService.ApplyLogsToStateMachine(commitIndex)
+			if applyErr != nil { rlService.Log.Error("error applying logs to state machine:", applyErr.Error()) }
 		}
 	}()
 
@@ -137,7 +181,10 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 
 	go func() {
 		for host := range rlService.SyncLogChannel {
-			go rlService.SyncLogs(host)
+			go func(host string) {
+				_, syncErr := rlService.SyncLogs(host)
+				if syncErr != nil { rlService.Log.Error("error syncing logs for host", host, ":", syncErr.Error()) }
+			}(host)
 		}
 	}()
 }
