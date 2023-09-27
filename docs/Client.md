@@ -12,7 +12,9 @@ This implementation integrates the Client HTTP module directly into the raft nod
 
 In use, the cluster is designed to be run behind a load balancer or proxy, where requests are then sent to any node in the cluster. The node, depending on whether or not it is a follower or leader, will then determine whether or not to relay the request to the leader node or process the incoming requests.
 
+If the node receiving the request is a follower, it will perform a redirect to the leader. Otherwise, it will process the incoming request.
+
 
 ## Sources
 
-[Client](../pkg/httpservice/HTTPService.go)
+[Client](../pkg/request/RequestService.go)

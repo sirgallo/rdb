@@ -36,6 +36,15 @@ import "github.com/sirgallo/raft/pkg/utils"
 				--> return a success response with the index of the latest log applied to the replicated log
 					else:
 				--> return a failed response so the follower can sync itself up to the leader if inconsistent log length
+
+		The AppendEntryRPC server can process requests asynchronously, but when appending to the replicated log, the request must pass
+		the log entries into a buffer where they will be appended/processed synchronously in a separate go routine. For requests like heartbeats,
+		this ensures that the context timeout period should not be reached unless extremely high system load, and should improve overall 
+		throughput of requests sent to followers. So even though requests are processed asynchronously, logs are still processed synchronously.
+
+		For applying logs to the statemachine, a separate go routine is also utilized. A signal is attempted with the current request leader
+		commit index, and is dropped if the go routine is already in the process of applying logs to the state machine. I guess this could be 
+		considered an "opportunistic" approach to state machine application. The above algorithm for application does not change.
 */
 
 func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *replogrpc.AppendEntry) (*replogrpc.AppendEntryResponse, error) {
@@ -56,13 +65,14 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 
 
 	resultsChan := make(chan *replogrpc.AppendEntryResponse)
+	errorChan := make(chan error)
 
 	go func() {
 		total, totalErr := rlService.CurrentSystem.WAL.GetTotal()
 		if totalErr != nil { 
 			rlService.Log.Error("get total error:", totalErr.Error())
-			// return nil, totalErr 
 			resultsChan <- nil
+			return
 		}
 	
 		latestKnownLogTerm := int64(0)
@@ -70,8 +80,8 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 		lastLog, getLastLogErr := rlService.CurrentSystem.WAL.GetLatest()
 		if getLastLogErr != nil { 
 			rlService.Log.Error("get last log error:", totalErr.Error())
-			// return nil, getLastLogErr 
-			resultsChan <- nil
+			errorChan <- totalErr
+			return
 		}
 	
 		if lastLog != nil { latestKnownLogTerm = lastLog.Term }
@@ -81,8 +91,8 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 		lastIndexedLog, lastIndexedErr := rlService.CurrentSystem.WAL.GetIndexedEntryForTerm(latestKnownLogTerm)
 		if lastIndexedErr != nil { 
 			rlService.Log.Error("get last log index error:", lastIndexedErr.Error())
-			// return nil, lastIndexedErr
-			resultsChan <- nil
+			errorChan <- lastIndexedErr
+			return
 		}
 	
 		if lastIndexedLog != nil { failedIndexToFetch = lastIndexedLog.Index }
@@ -93,8 +103,8 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 		}()
 	
 		if failedIndexErr != nil { 
-			//return nil, failedIndexErr 
-			resultsChan <- nil
+			errorChan <- failedIndexErr
+			return
 		}
 	
 		handleReqTerm := func() bool { return req.Term >= rlService.CurrentSystem.CurrentTerm }
@@ -109,8 +119,8 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 		reqTermOk := handleReqTerm()
 		if ! reqTermOk {
 			rlService.Log.Warn("request term lower than current term, returning failed response")
-			// return rlService.generateResponse(failedNextIndex, false), nil
 			resultsChan <- rlService.generateResponse(failedNextIndex, false)
+			return
 		}
 	
 		rlService.CurrentSystem.SetCurrentLeader(req.LeaderId)
@@ -118,21 +128,20 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 		reqTermValid, readErr := handleReqValidTermAtIndex()
 		if readErr != nil { 
 			rlService.Log.Error("read error:", readErr.Error())
-			// return rlService.generateResponse(failedNextIndex, false), readErr
 			resultsChan <- rlService.generateResponse(failedNextIndex, false)
+			return
 		}
 		
 		if ! reqTermValid {
 			rlService.Log.Warn("log at request previous index has mismatched term or does not exist, returning failed response")
-			// return rlService.generateResponse(failedNextIndex, false), nil
 			resultsChan <- rlService.generateResponse(failedNextIndex, false)
 		}
 	
 		ok, repLogErr := rlService.HandleReplicateLogs(req)
 		if repLogErr != nil { 
 			rlService.Log.Error("rep log handle error:", repLogErr.Error())
-			// return rlService.generateResponse(failedNextIndex, false), repLogErr
 			resultsChan <- rlService.generateResponse(failedNextIndex, false)
+			return
 		}
 
 		if ! ok { resultsChan <- rlService.generateResponse(failedNextIndex, false) }
@@ -140,34 +149,35 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 		lastLogIndex, _, lastLogErr := rlService.CurrentSystem.DetermineLastLogIdxAndTerm()
 		if lastLogErr != nil { 
 			rlService.Log.Error("error getting last log index", lastLogErr.Error())
-			// return rlService.generateResponse(failedNextIndex, false), lastLogErr 
 			resultsChan <- rlService.generateResponse(failedNextIndex, false)
+			return
 		}
 	
 		nextLogIndex := lastLogIndex + 1
 	
 		if repLogErr != nil {
 			rlService.Log.Error("replog err:", repLogErr.Error())
-			// return rlService.generateResponse(nextLogIndex, false), repLogErr
 			resultsChan <- rlService.generateResponse(nextLogIndex, false)
+			return
 		}
 	
 		if lastLogIndex < req.LeaderCommitIndex && req.Entries != nil {
 			rlService.Log.Warn("log length inconsistent with leader log length")
-			// return rlService.generateResponse(nextLogIndex, false), nil
 			resultsChan <- rlService.generateResponse(nextLogIndex, false)
+			return
 		}
 	
 		successfulResp := rlService.generateResponse(nextLogIndex, true)
 		rlService.Log.Info("leader", req.LeaderId, "acknowledged and returning successful response:", successfulResp)
 	
-		// return successfulResp, nil
 		resultsChan <- successfulResp
 	}()
 
 	select {
 		case result :=<- resultsChan:
 			return result, nil
+		case appendEntryRPCError :=<- errorChan:
+			return nil, appendEntryRPCError
 		case <- ctx.Done():
 			return nil, ctx.Err()
 	}
@@ -175,12 +185,8 @@ func (rlService *ReplicatedLogService) AppendEntryRPC(ctx context.Context, req *
 
 /*
 	Handle Replicate Logs:
-		helper method used for both replicating the logs to the follower's replicated log and also for applying logs to
-		the state machine up to the leader's last commit index or last known log on the system if it is less than the 
-		commit index of the leader
-
-		instead of appending one at a time, we can batch all of the log entries into a single bolt db transaction to reduce 
-		overhead and total transactions performed on the db, which should improve performance
+		For incoming requests, if request contains log entries, pipe into buffer to be processed
+		otherwise, attempt signalling to log application channel to update state machine
 */
 
 func (rlService *ReplicatedLogService) HandleReplicateLogs(req *replogrpc.AppendEntry) (bool, error) {
@@ -199,7 +205,18 @@ func (rlService *ReplicatedLogService) HandleReplicateLogs(req *replogrpc.Append
 	return true, nil
 }
 
-func (rlService *ReplicatedLogService) AppendLogsToReplog(req *replogrpc.AppendEntry) (bool, error) {
+/*
+	Process Logs Follower:
+		helper method used for replicating the logs to the follower's replicated log
+
+		instead of appending one at a time, we can batch all of the log entries into a single bolt db transaction to reduce 
+		overhead and total transactions performed on the db, which should improve performance
+
+		this is run in a separate go routine so that requests can be processed asynchronously, but logs can be processed synchronously
+		as they enter the buffer
+*/
+
+func (rlService *ReplicatedLogService) ProcessLogsFollower(req *replogrpc.AppendEntry) (bool, error) {
 	logTransform := func(entry *replogrpc.LogEntry) *log.LogEntry {
 		cmd, decErr := utils.DecodeStringToStruct[statemachine.StateMachineOperation](entry.Command)
 		if decErr != nil {
@@ -251,15 +268,15 @@ func (rlService *ReplicatedLogService) AppendLogsToReplog(req *replogrpc.AppendE
 	return true, nil
 }
 
-func (rlService *ReplicatedLogService) generateResponse(lastLogIndex int64, success bool) *replogrpc.AppendEntryResponse {
-	return &replogrpc.AppendEntryResponse{
-		Term: rlService.CurrentSystem.CurrentTerm,
-		NextLogIndex: lastLogIndex,
-		Success: success,
-	}
-}
+/*
+	Apply Logs To State Machine Follower:
+		helper method for applying logs to the state machine up to the leader's last commit index or 
+		last known log on the system if it is less than the commit index of the leader
 
-func (rlService *ReplicatedLogService) ApplyLogsToStateMachine(leaderCommitIndex int64) error {
+		again, this is run in a separate go routine, with opportunistic approach
+*/
+
+func (rlService *ReplicatedLogService) ApplyLogsToStateMachineFollower(leaderCommitIndex int64) error {
 	min := func(idx1, idx2 int64) int64 {
 		if idx1 < idx2 { return idx1 }
 		return idx2
@@ -282,4 +299,12 @@ func (rlService *ReplicatedLogService) ApplyLogsToStateMachine(leaderCommitIndex
 	}
 
 	return nil
+}
+
+func (rlService *ReplicatedLogService) generateResponse(lastLogIndex int64, success bool) *replogrpc.AppendEntryResponse {
+	return &replogrpc.AppendEntryResponse{
+		Term: rlService.CurrentSystem.CurrentTerm,
+		NextLogIndex: lastLogIndex,
+		Success: success,
+	}
 }

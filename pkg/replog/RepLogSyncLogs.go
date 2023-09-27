@@ -24,8 +24,6 @@ func (rlService *ReplicatedLogService) SyncLogs(host string) (bool, error) {
 	s, _ := rlService.Systems.Load(host)
 	sys := s.(*system.System)
 
-	sys.SetStatus(system.Busy)
-
 	conn, connErr := rlService.ConnectionPool.GetConnection(sys.Host, rlService.Port)
 	if connErr != nil {
 		rlService.Log.Error("Failed to connect to", sys.Host + rlService.Port, ":", connErr.Error())

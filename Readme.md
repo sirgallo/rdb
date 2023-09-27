@@ -11,9 +11,8 @@ The Raft Service is separated into modules, all of which are meant to be able to
 
 1. Leader Election Module
 2. Replicated Log Module
-3. Relay Module
-4. Snapshot Module
-5. HTTP Module
+3. Snapshot Module
+4. Request Module
 
 To learn more about each, check out:
 
@@ -21,19 +20,16 @@ To learn more about each, check out:
 
 [Replicated Log](./docs/ReplicatedLog.md)
 
-[Relay](./docs/RelayModule.md)
-
 [Snapshot](./docs/Snapshot.md)
 
-[HTTPModule](./docs/Client.md)
+[RequestModule](./docs/Client.md)
 
 
 The protocol buffer schemas are as follows:
 
   1. RequestVoteRPC
   2. AppendEntryRPC 
-  3. RelayRPC
-  4. SnapshotRPC 
+  3. SnapshotRPC 
   
 All schemas can be found under [proto](./proto).
 
@@ -237,8 +233,5 @@ curl --location 'https://<your-host>/command' \
 
 ## To Come
 
-The database is currently in its infancy, so many changes are coming in the pipeline:
-  
-  1. range queries
-  2. value schemas and indexing on fields in the structs
-  3. better unit tests
+  1. better unit tests
+  2. update state machine to include object schemas (using reflection)

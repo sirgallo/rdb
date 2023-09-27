@@ -34,7 +34,6 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		SignalCompleteSnapshot: make(chan bool),
 		SendSnapshotToSystemSignal: make(chan string),
 		StateMachineResponseChannel: make(chan *statemachine.StateMachineResponse, ResponseBuffSize),
-		AppendedChannel: make(chan bool, 1),
 		AppendLogsFollowerChannel: make(chan *replogrpc.AppendEntry, AppendLogBuffSize),
 		AppendLogsFollowerRespChannel: make(chan bool),
 		ApplyLogsFollowerChannel: make(chan int64),
@@ -65,22 +64,39 @@ func (rlService *ReplicatedLogService) StartReplicatedLogService(listener *net.L
 }
 
 /*
-	start the log timeouts:
+	Start both leader and follower specific go routines
+*/
+
+func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
+	go rlService.LeaderGoRoutines()
+	go rlService.FollowerGoRoutines()
+}
+
+/*
+	Leader Go Routines:
 		separate go routines:
 			1.) heartbeat timeout
 				--> wait for timer to drain, signal heartbeat, and reset timer
-			2.) signal complete snapshot
-				--> when a snapshot has been completed, signal to unpause the replicated log
-			3.) replicated log
-				--> if a new log is signalled for append to the log, replicate the log to followers
-			4.) heartbeat
+			2.) replicate log timeout:
+				--> wait for timer to drain, signal to replicate logs to followers, and reset timer
+			3.) heartbeat
 				--> on a set interval, heartbeat all of the followers in the cluster if leader
-			5.) sync logs
+			4.) append log signal
+				--> on incoming logs from the request module, determine if the log is a read or write op
+					and handle accordingly
+			5.) read operation handler
+				--> on read operations, do not apply to replicated log and instead read directly from 
+					db -- since data is not modified, this is an optimization to improve latency on reads
+			6.) write operation handler
+				--> append logs to the replicated log in order as the leader receives them
+			7.) replicated log
+				--> after the replicate log timeout completes, begin replication to followers
+			8.) sync logs
 				--> for systems with inconsistent replicated logs, start a separate go routine to sync
 					them back up to the leader
 */
 
-func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
+func (rlService *ReplicatedLogService) LeaderGoRoutines() {
 	rlService.HeartBeatTimer = time.NewTimer(HeartbeatInterval)
 	rlService.ReplicateLogsTimer = time.NewTimer(RepLogInterval)
 	
@@ -103,6 +119,24 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 		for range rlService.ReplicateLogsTimer.C {
 			replicateLogsChan <- true
 			rlService.resetReplogTimer()
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+				case <- timeoutChan:
+					if rlService.CurrentSystem.State == system.Leader {
+						rlService.Log.Info("sending heartbeats...")
+						rlService.Heartbeat()
+					}
+				case <- rlService.ForceHeartbeatSignal:
+					if rlService.CurrentSystem.State == system.Leader {
+						rlService.attemptResetTimeout()
+						rlService.Log.Info("sending heartbeats after election...")
+						rlService.Heartbeat()
+					}
+			}
 		}
 	}()
 
@@ -143,8 +177,30 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 	}()
 
 	go func() {
+		for host := range rlService.SyncLogChannel {
+			go func(host string) {
+				_, syncErr := rlService.SyncLogs(host)
+				if syncErr != nil { rlService.Log.Error("error syncing logs for host", host, ":", syncErr.Error()) }
+			}(host)
+		}
+	}()
+}
+
+/*
+	Follower Go Routines:
+		separate go routines:
+			1.) process logs
+				--> as logs are received from AppendEntryRPCs from the leader, process the logs synchronously 
+				and signal to the request when complete
+			2.) apply logs to state machine
+				--> when signalled by a request, and available, apply logs to the state machine up to the request
+					commit index
+*/
+
+func (rlService *ReplicatedLogService) FollowerGoRoutines() {
+	go func() {
 		for req := range rlService.AppendLogsFollowerChannel {
-			_, appendErr := rlService.AppendLogsToReplog(req)
+			_, appendErr := rlService.ProcessLogsFollower(req)
 			if appendErr != nil { 
 				rlService.Log.Error("error appending logs to follower:", appendErr.Error()) 
 				rlService.AppendLogsFollowerRespChannel <- false
@@ -156,35 +212,8 @@ func (rlService *ReplicatedLogService) StartReplicatedLogTimeout() {
 
 	go func() {
 		for commitIndex := range rlService.ApplyLogsFollowerChannel {
-			applyErr := rlService.ApplyLogsToStateMachine(commitIndex)
+			applyErr := rlService.ApplyLogsToStateMachineFollower(commitIndex)
 			if applyErr != nil { rlService.Log.Error("error applying logs to state machine:", applyErr.Error()) }
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-				case <- timeoutChan:
-					if rlService.CurrentSystem.State == system.Leader {
-						rlService.Log.Info("sending heartbeats...")
-						rlService.Heartbeat()
-					}
-				case <- rlService.ForceHeartbeatSignal:
-					if rlService.CurrentSystem.State == system.Leader {
-						rlService.attemptResetTimeout()
-						rlService.Log.Info("sending heartbeats after election...")
-						rlService.Heartbeat()
-					}
-			}
-		}
-	}()
-
-	go func() {
-		for host := range rlService.SyncLogChannel {
-			go func(host string) {
-				_, syncErr := rlService.SyncLogs(host)
-				if syncErr != nil { rlService.Log.Error("error syncing logs for host", host, ":", syncErr.Error()) }
-			}(host)
 		}
 	}()
 }

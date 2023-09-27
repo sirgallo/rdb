@@ -42,7 +42,6 @@ type ReplicatedLogService struct {
 	SignalCompleteSnapshot chan bool
 	SendSnapshotToSystemSignal chan string
 	StateMachineResponseChannel chan *statemachine.StateMachineResponse
-	AppendedChannel chan bool
 	ApplyLogsFollowerChannel chan int64
 	AppendLogsFollowerRespChannel chan bool
 	AppendLogsFollowerChannel chan *replogrpc.AppendEntry

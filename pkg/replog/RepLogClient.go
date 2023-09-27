@@ -228,6 +228,7 @@ func (rlService *ReplicatedLogService) broadcastAppendEntryRPC(requestsPerHost [
 							cancel()
 						} else {
 							rlService.Log.Warn("preparing to sync logs for:", sys.Host)
+							sys.SetStatus(system.Busy)
 							rlService.SyncLogChannel <- sys.Host
 						}
 					}

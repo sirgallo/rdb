@@ -151,6 +151,11 @@ func (rlService *ReplicatedLogService) resetTimer() {
 	rlService.HeartBeatTimer.Reset(HeartbeatInterval)
 }
 
+/*
+	Reset Replog Timer:
+		same as above
+*/
+
 func (rlService *ReplicatedLogService) resetReplogTimer() {
 	if ! rlService.ReplicateLogsTimer.Stop() {
 		select {
