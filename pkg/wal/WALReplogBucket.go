@@ -1,14 +1,12 @@
 package wal
 
 import "bytes"
-
 import bolt "go.etcd.io/bbolt"
 
 import "github.com/sirgallo/raft/pkg/log"
 
 
 //=========================================== Write Ahead Log Replog Bucket Ops
-
 
 /*
 	Append
@@ -252,48 +250,36 @@ func (wal *WAL) GetEarliest() (*log.LogEntry, error) {
 			3.) get latest log (last applied), and remove all indexes up to it
 */
 
-func (wal *WAL) DeleteLogs(endIndex int64) error {
+func (wal *WAL) DeleteLogsUpToLastIncluded(endIndex int64) (int64, int64, error) {
+	totalBytesRemoved := int64(0)
+	totalKeysRemoved := int64(0)
+
+	chunkSize := 500
+
+	for startIndex := int64(0); startIndex <= endIndex; startIndex += int64(chunkSize) {
+		currentChunkEndIndex := startIndex + int64(chunkSize)
+		if currentChunkEndIndex > endIndex { currentChunkEndIndex = endIndex }
+
+		transaction := func(tx *bolt.Tx) error {
+			bucketName := []byte(Replog)
+			bucket := tx.Bucket(bucketName)
+
+			subTotalBytes, subKeys, subErr := wal.deleteLogsHelper(bucket, startIndex, currentChunkEndIndex)
+			if subErr != nil { return subErr }
+
+			totalBytesRemoved += subTotalBytes
+			totalKeysRemoved += subKeys
+
+			return nil
+		}
+
+		delErr := wal.DB.Update(transaction)
+		if delErr != nil { return totalBytesRemoved, totalKeysRemoved, delErr }
+	}
+
 	transaction := func(tx *bolt.Tx) error {
 		bucketName := []byte(Replog)
 		bucket := tx.Bucket(bucketName)
-
-		walBucketName := []byte(ReplogWAL)
-		walBucket := bucket.Bucket(walBucketName)
-
-		endKey := ConvertIntToBytes(endIndex)
-
-		cursor := walBucket.Cursor()
-		
-		totalBytesRemoved := int64(0)
-		totalKeysRemoved := int64(0)
-		
-		for key, val := cursor.First(); key != nil && bytes.Compare(key, endKey) <= 0; key, val = cursor.Next() {
-			delErr := bucket.Delete(key)
-			if delErr != nil { return delErr }
-
-			totalBytesRemoved += int64(len(key)) + int64(len(val))
-			totalKeysRemoved++
-		}
-
-		keyOfFirstLog := ConvertIntToBytes(endIndex + 1)
-		val := walBucket.Get(keyOfFirstLog)
-
-		if val != nil { 
-			entry, transformErr := log.TransformBytesToLogEntry(val)
-			if transformErr != nil { return transformErr }
-	
-			indexBucketName := []byte(ReplogIndex)
-			indexBucket := bucket.Bucket(indexBucketName)
-
-			latestTermKey := ConvertIntToBytes(entry.Term)
-
-			indexCursor := indexBucket.Cursor()
-
-			for key, _ := indexCursor.First(); key != nil && bytes.Compare(key, latestTermKey) < 0; key, _ = indexCursor.Next() {
-				delErr := indexBucket.Delete(key)
-				if delErr != nil { return delErr }
-			}
-		} 
 
 		updateErr := wal.UpdateReplogStats(bucket, totalBytesRemoved, totalKeysRemoved, SUB)
 		if updateErr != nil { return updateErr }
@@ -301,10 +287,10 @@ func (wal *WAL) DeleteLogs(endIndex int64) error {
 		return nil
 	}
 
-	delErr := wal.DB.Update(transaction)
-	if delErr != nil { return delErr }
+	updateStatsErr := wal.DB.Update(transaction)
+	if updateStatsErr != nil { return totalBytesRemoved, totalKeysRemoved, updateStatsErr }
 
-	return nil
+	return totalBytesRemoved, totalKeysRemoved, nil
 }
 
 /*
@@ -462,6 +448,59 @@ func (wal *WAL) appendHelper(bucket *bolt.Bucket, entry *log.LogEntry) (int64, i
 	totalKeysAdded := int64(1)
 
 	return totalBytesAdded, totalKeysAdded, nil
+}
+
+func (wal *WAL) deleteLogsHelper(bucket *bolt.Bucket, startIndex, endIndex int64) (int64, int64, error){
+	totalBytesRemoved := int64(0)
+	totalKeysRemoved := int64(0)
+
+	walBucketName := []byte(ReplogWAL)
+	walBucket := bucket.Bucket(walBucketName)
+
+	startKey := ConvertIntToBytes(startIndex)
+	endKey := ConvertIntToBytes(endIndex)
+
+	var firstTermInBatch int64
+	firstEntryToBeDeleted := walBucket.Get(startKey)
+	if firstEntryToBeDeleted != nil { 
+		entry, transformErr := log.TransformBytesToLogEntry(firstEntryToBeDeleted)
+		if transformErr != nil { return totalBytesRemoved, totalKeysRemoved, transformErr }
+
+		firstTermInBatch = entry.Term
+	}
+
+	cursor := walBucket.Cursor()
+	
+	for key, val := cursor.Seek(startKey); key != nil && bytes.Compare(key, endKey) <= 0; key, val = cursor.Next() {
+		delErr := bucket.Delete(key)
+		if delErr != nil { return totalBytesRemoved, totalKeysRemoved, delErr }
+
+		totalBytesRemoved += int64(len(key)) + int64(len(val))
+		totalKeysRemoved++
+	}
+
+	keyOfNextLog := ConvertIntToBytes(endIndex + 1)
+	val := walBucket.Get(keyOfNextLog)
+
+	if val != nil { 
+		entry, transformErr := log.TransformBytesToLogEntry(val)
+		if transformErr != nil { return totalBytesRemoved, totalKeysRemoved, transformErr }
+
+		indexBucketName := []byte(ReplogIndex)
+		indexBucket := bucket.Bucket(indexBucketName)
+
+		firstTermKey := ConvertIntToBytes(firstTermInBatch)
+		latestTermKey := ConvertIntToBytes(entry.Term)
+
+		indexCursor := indexBucket.Cursor()
+
+		for key, _ := indexCursor.Seek(firstTermKey); key != nil && bytes.Compare(key, latestTermKey) < 0; key, _ = indexCursor.Next() {
+			delErr := indexBucket.Delete(key)
+			if delErr != nil { return totalBytesRemoved, totalKeysRemoved, delErr }
+		}
+	} 
+
+	return totalBytesRemoved, totalKeysRemoved, nil
 }
 
 /*

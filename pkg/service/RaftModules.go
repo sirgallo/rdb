@@ -45,9 +45,6 @@ func (raft *RaftService) StartModules() {
 			on responses from state machine ops, pass to request channel to be sent to
 			the client
 		go routine 4:
-			on signal from replicated log module to start snapshot process, send signal 
-			to the snapshot module
-		go routine 5:
 			on signal from the replicated log module that a follower needs the most up
 			to date snapshot, signal the snapshot module to send to that follower
 */
@@ -78,12 +75,6 @@ func (raft *RaftService) StartModulePassThroughs() {
 			if raft.CurrentSystem.State == system.Leader {
 				raft.RequestService.ResponseChannel <- response
 			}
-		}
-	}()
-
-	go func() {
-		for range raft.ReplicatedLog.SignalStartSnapshot {
-			raft.Snapshot.SnapshotStartSignal <- true
 		}
 	}()
 

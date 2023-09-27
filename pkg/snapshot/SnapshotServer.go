@@ -74,11 +74,15 @@ func (snpService *SnapshotService) StreamSnapshotRPC(stream snapshotrpc.Snapshot
 		return setErr 
 	}
 
-	delErr := snpService.CurrentSystem.WAL.DeleteLogs(lastIncludedIndex - 1)
+	snpService.Log.Debug("attempting to compact from start to index:", lastIncludedIndex - 1)
+
+	totBytesRem, totKeysRem, delErr := snpService.CurrentSystem.WAL.DeleteLogsUpToLastIncluded(lastIncludedIndex - 1)
 	if delErr != nil { 
 		snpService.Log.Error("error compacting logs:", delErr.Error())
 		return delErr 
 	}
+
+	snpService.Log.Debug("total bytes removed:", totBytesRem, "total keys removed:", totKeysRem)
 
 	snpService.Log.Info("snapshot processed log compacted, returning successful response to leader")
 

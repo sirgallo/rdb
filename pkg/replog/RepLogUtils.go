@@ -134,13 +134,13 @@ func (rlService *ReplicatedLogService) GetAliveSystemsAndMinSuccessResps() ([]*s
 }
 
 /*
-	Reset Timer:
+	Reset Heartbeat Timer:
 		used to reset the heartbeat timer:
 			--> if unable to stop the timer, drain the timer
 			--> reset the timer with the heartbeat interval
 */
 
-func (rlService *ReplicatedLogService) resetTimer() {
+func (rlService *ReplicatedLogService) resetHeartbeatTimer() {
 	if ! rlService.HeartBeatTimer.Stop() {
 		select {
 			case <-rlService.HeartBeatTimer.C:

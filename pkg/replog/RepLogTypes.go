@@ -23,7 +23,6 @@ type ReplicatedLogService struct {
 	replogrpc.UnimplementedRepLogServiceServer
 	Port string
 	ConnectionPool *connpool.ConnectionPool
-	TriggerSnapshotMutex sync.Mutex
 
 	CurrentSystem *system.System
 	Systems *sync.Map
@@ -38,8 +37,6 @@ type ReplicatedLogService struct {
 	ResetTimeoutSignal chan bool
 	ForceHeartbeatSignal chan bool
 	SyncLogChannel chan string
-	SignalStartSnapshot chan bool
-	SignalCompleteSnapshot chan bool
 	SendSnapshotToSystemSignal chan string
 	StateMachineResponseChannel chan *statemachine.StateMachineResponse
 	ApplyLogsFollowerChannel chan int64
@@ -67,4 +64,3 @@ const RepLogInterval = 150 * time.Millisecond
 const RPCTimeout = 200 * time.Millisecond
 const AppendLogBuffSize = 1000000
 const ResponseBuffSize = 100000
-const FractionOfAvailableSizeToTake = 1000 // let's take consistent snapshots

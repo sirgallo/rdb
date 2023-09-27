@@ -1,7 +1,7 @@
 package statemachine
 
-import bolt "go.etcd.io/bbolt"
 import "strings"
+import bolt "go.etcd.io/bbolt"
 
 import "github.com/sirgallo/raft/pkg/utils"
 

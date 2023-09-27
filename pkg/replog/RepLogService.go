@@ -30,8 +30,6 @@ func NewReplicatedLogService(opts *ReplicatedLogOpts) *ReplicatedLogService {
 		LeaderAcknowledgedSignal: make(chan bool),
 		ForceHeartbeatSignal: make(chan bool),
 		SyncLogChannel: make(chan string),
-		SignalStartSnapshot: make(chan bool),
-		SignalCompleteSnapshot: make(chan bool),
 		SendSnapshotToSystemSignal: make(chan string),
 		StateMachineResponseChannel: make(chan *statemachine.StateMachineResponse, ResponseBuffSize),
 		AppendLogsFollowerChannel: make(chan *replogrpc.AppendEntry, AppendLogBuffSize),
@@ -107,10 +105,10 @@ func (rlService *ReplicatedLogService) LeaderGoRoutines() {
 		for {
 			select {
 				case <- rlService.ResetTimeoutSignal:
-					rlService.resetTimer()
+					rlService.resetHeartbeatTimer()
 				case <- rlService.HeartBeatTimer.C:
 					timeoutChan <- true
-					rlService.resetTimer()
+					rlService.resetHeartbeatTimer()
 			}
 		}
 	}()
@@ -143,7 +141,11 @@ func (rlService *ReplicatedLogService) LeaderGoRoutines() {
 	go func() {
 		for newCmd := range rlService.AppendLogSignal {
 			if rlService.CurrentSystem.State == system.Leader { 
-				if newCmd.Action == statemachine.FIND || newCmd.Action == statemachine.LISTCOLLECTIONS {
+				isReadOperation := func() bool {
+					return newCmd.Action == statemachine.FIND || newCmd.Action == statemachine.LISTCOLLECTIONS
+				}()
+
+				if isReadOperation {
 					rlService.ReadChannel <- newCmd
 				}	else { rlService.WriteChannel <- newCmd  }
 			}
@@ -159,7 +161,6 @@ func (rlService *ReplicatedLogService) LeaderGoRoutines() {
 		}
 	}()
 
-	
 	go func() {
 		for writeCmd := range rlService.WriteChannel {
 			appendErr := rlService.AppendWALSync(writeCmd)

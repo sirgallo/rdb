@@ -1,7 +1,6 @@
 package wal
 
 import "sync"
-
 import bolt "go.etcd.io/bbolt"
 
 

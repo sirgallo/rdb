@@ -2,7 +2,6 @@ package statemachine
 
 import "os"
 import "path/filepath"
-
 import bolt "go.etcd.io/bbolt"
 
 import "github.com/sirgallo/raft/pkg/logger"

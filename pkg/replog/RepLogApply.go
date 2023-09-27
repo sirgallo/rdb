@@ -20,11 +20,6 @@ import "github.com/sirgallo/raft/pkg/utils"
 			if the commit failed: throw an error since the the state machine was incorrectly committed to
 			if the commit completed: update the last applied field on the system to the index of the log
 				entry
-		5.) if the size of the replicated log has exceeded the threshold determined dynamically by available space
-			in the current mount and the current node is the leader, trigger a snapshot event to take a snapshot of
-			the current state to store and broadcast to all followers, also pause the replicated log and let buffer 
-			until the snapshot is complete. If a snapshot is performed, calculate the current system stats to update the
-			dynamic threshold for snapshotting
 */
 
 func (rlService *ReplicatedLogService) ApplyLogs() error {
@@ -67,33 +62,6 @@ func (rlService *ReplicatedLogService) ApplyLogs() error {
 	} 
 	
 	rlService.CurrentSystem.UpdateLastApplied(lastLogToBeApplied.Index)
-
-	bucketSizeInBytes, getSizeErr := rlService.CurrentSystem.WAL.GetBucketSizeInBytes()
-	if getSizeErr != nil { 
-		rlService.Log.Error("error fetching bucket size:", getSizeErr.Error())
-		return getSizeErr
-	}
-
-	rlService.TriggerSnapshotMutex.Lock()
-
-	triggerSnapshot := func() bool { 
-		statsArr, getStatsErr := rlService.CurrentSystem.WAL.GetStats()
-		if statsArr == nil || getStatsErr != nil { return false }
-
-		latestObj := statsArr[len(statsArr) - 1]
-		thresholdInBytes := latestObj.AvailableDiskSpaceInBytes / FractionOfAvailableSizeToTake // let's keep this small for now
-
-		lastAppliedAtThreshold := bucketSizeInBytes >= thresholdInBytes
-		systemAbleToSnapshot := rlService.CurrentSystem.State == system.Leader && rlService.CurrentSystem.Status != system.Busy
-		return lastAppliedAtThreshold && systemAbleToSnapshot
-	}()
-
-	if triggerSnapshot { 
-		rlService.CurrentSystem.SetStatus(system.Busy)
-		rlService.SignalStartSnapshot <- true 
-	}
-
-	rlService.TriggerSnapshotMutex.Unlock()
 
 	return nil
 }

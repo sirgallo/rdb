@@ -27,3 +27,21 @@ func (snpService *SnapshotService) GetAliveSystemsAndMinSuccessResps() ([]*syste
 	totAliveSystems := len(aliveSystems) + 1
 	return aliveSystems, (totAliveSystems / 2) + 1
 }
+
+/*
+	Reset Attempt Snapshot Timer:
+		used to reset the attempt snapshot timer:
+			--> if unable to stop the timer, drain the timer
+			--> reset the timer with the heartbeat interval
+*/
+
+func (snpService *SnapshotService) resetAttemptSnapshotTimer() {
+	if ! snpService.AttemptSnapshotTimer.Stop() {
+		select {
+			case <- snpService.AttemptSnapshotTimer.C:
+			default:
+		}
+	}
+
+	snpService.AttemptSnapshotTimer.Reset(AttemptSnapshotInterval)
+}

@@ -25,6 +25,8 @@ type SnapshotService struct {
 	CurrentSystem *system.System
 	Systems *sync.Map
 
+	AttemptSnapshotTimer *time.Timer
+
 	SnapshotStartSignal chan bool
 	UpdateSnapshotForSystemSignal chan string
 	ProcessIncomingSnapshotSignal chan *snapshotrpc.SnapshotChunk
@@ -34,6 +36,8 @@ type SnapshotService struct {
 
 const NAME = "Snapshot"
 const RPCTimeout = 200 * time.Millisecond
+const AttemptSnapshotInterval = 1 * time.Minute
 const SnapshotTriggerAppliedIndex = 10000
 
 const ChunkSize = 1000000	// we will stream 1MB chunks
+const FractionOfAvailableSizeToTake = 1000 // let's take consistent snapshots

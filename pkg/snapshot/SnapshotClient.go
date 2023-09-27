@@ -51,11 +51,15 @@ func (snpService *SnapshotService) Snapshot() error {
 	setErr := snpService.CurrentSystem.WAL.SetSnapshot(snapshotEntry)
 	if setErr != nil { return setErr }
 
-	delErr := snpService.CurrentSystem.WAL.DeleteLogs(lastAppliedLog.Index - 1)
+	snpService.Log.Debug("attempting to compact log from start to index:", lastAppliedLog.Index - 1)
+
+	totBytesRem, totKeysRem, delErr := snpService.CurrentSystem.WAL.DeleteLogsUpToLastIncluded(lastAppliedLog.Index - 1)
 	if delErr != nil { 
 		snpService.Log.Error("error deleting logs")
 		return delErr 
 	}
+
+	snpService.Log.Debug("total bytes removed:", totBytesRem, "total keys removed:", totKeysRem)
 
 	initSnapShotRPC := &snapshotrpc.SnapshotChunk{
 		LastIncludedIndex: lastAppliedLog.Index,

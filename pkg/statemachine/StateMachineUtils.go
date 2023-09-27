@@ -3,7 +3,6 @@ package statemachine
 import "io"
 import "os"
 import "path/filepath"
-
 import bolt "go.etcd.io/bbolt"
 
 import "github.com/sirgallo/raft/pkg/utils"
@@ -32,6 +31,7 @@ func (sm *StateMachine) SnapshotStateMachine() (string, error) {
 
 	snapshotFile, fCreateErr := os.Create(snapshotPath)
 	if fCreateErr != nil { return utils.GetZero[string](), fCreateErr }
+	
 	defer snapshotFile.Close()
 
 	transaction := func(tx *bolt.Tx) error {
