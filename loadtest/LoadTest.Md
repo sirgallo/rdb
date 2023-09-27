@@ -56,5 +56,5 @@ To access the dashboard, open your web browser to `0.0.0.0:8089`. Here, the test
 ```
 average rps over 10 minutes: ~2900-3050rps
 read operation latency: 8-20ms
-write operation latency: 82-260ms
+write operation latency: 148-350ms
 ```
